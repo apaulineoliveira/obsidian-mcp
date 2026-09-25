@@ -60,6 +60,7 @@ obsidian-mcp-server/
 
 ### Passo 1: Clone ou Crie o Projeto
 
+
 ```bash
 # Se clonando do GitHub:
 git clone git@github.com:SEU-USUARIO/obsidian-mcp.git
