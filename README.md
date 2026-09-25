@@ -313,18 +313,6 @@ Means it's running the wrong Python (not from venv). Check the path in `claude_d
 python3.11
 ```
 
-## Next Steps
-
-Ideas to expand the project:
-
-- [ ] Filter to-dos by tags (`#urgent #work`)
-- [ ] Schedule tasks (read creation date)
-- [ ] Support subtasks (indentation)
-- [ ] Bidirectional sync with Notion/Asana
-- [ ] Own CLI (`obsidian-mcp list --completed`)
-- [ ] Webhooks for real-time updates
-- [ ] Support other formats (YAML frontmatter, etc)
-
 ## Resources
 
 - [Model Context Protocol - Official Docs](https://modelcontextprotocol.io)
