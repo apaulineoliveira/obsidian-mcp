@@ -2,7 +2,7 @@
 
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that connects your Obsidian vault directly to Claude and Cursor, allowing you to manage your to-dos without retyping tasks.
 
-**Portuguese version:** [README.md](README.md)
+**Portuguese version:** [README.pt.md](README.pt.md)
 
 ## What is MCP?
 
@@ -37,7 +37,7 @@ obsidian-mcp-server/
 └── setup.py                     # Package metadata (optional)
 ```
 
-### 📄 What each file does:
+### What each file does:
 
 | File | Function |
 |------|----------|
@@ -48,7 +48,7 @@ obsidian-mcp-server/
 | `claude_desktop_config.json` | Config that Claude Desktop reads from `~/Library/Application Support/Claude/` to know about the server |
 | `mcp.json` | Config that Cursor reads from `~/.cursor/` to know about the server |
 
-## 🛠️ Installation
+## Installation
 
 ### Prerequisites
 
@@ -124,7 +124,7 @@ python3 src/obsidian_mcp.py
 
 If it works, the terminal waits (no error should appear). Press **Ctrl+C** to exit.
 
-## ⚙️ Configuration (Claude Desktop + Cursor)
+## Configuration (Claude Desktop + Cursor)
 
 ### Claude Desktop
 
@@ -186,7 +186,7 @@ EOF
 
 3. Restart Cursor (Cmd+Q and open again)
 
-## 💬 How to Use
+## How to Use
 
 ### In Claude Desktop
 
@@ -212,7 +212,7 @@ Claude will automatically call `update_todo`.
 
 Access the Claude tab (left side) and ask the same questions. Behavior is identical.
 
-## 🔍 How It Works Under the Hood
+## How It Works Under the Hood
 
 ```
 Claude/Cursor (AIs)
@@ -235,7 +235,7 @@ JSON responses
 Claude/Cursor displays to you
 ```
 
-## 📝 Code Structure
+## Code Structure
 
 ### `src/obsidian_mcp.py` - The Jewel
 
@@ -277,7 +277,7 @@ if __name__ == "__main__":
 4. **Claude**: Receives JSON, formats nicely and displays
 5. **You**: See your 167 to-dos listed
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### "I don't have access to your Obsidian"
 
