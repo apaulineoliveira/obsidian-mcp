@@ -313,18 +313,6 @@ Significa que está rodando o Python errado (não o do venv). Verifique o caminh
 python3.11
 ```
 
-## 🌟 Próximos Passos
-
-Ideias para expandir o projeto:
-
-- [ ] Filtrar to-dos por tags (`#urgente #trabalho`)
-- [ ] Agendar tarefas (ler data de criação)
-- [ ] Suporte a subtarefas (indentação)
-- [ ] Sincronização bidirecional com Notion/Asana
-- [ ] CLI próprio (`obsidian-mcp list --completed`)
-- [ ] Webhooks para atualizar em tempo real
-- [ ] Suporte a outros formatos (YAML frontmatter, etc)
-
 ## 📚 Recursos
 
 - [Model Context Protocol - Documentação Oficial](https://modelcontextprotocol.io)
