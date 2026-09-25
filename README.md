@@ -19,6 +19,7 @@ Without MCP, you'd have to copy and paste your tasks every time. With MCP, Claud
 - ✅ Recursive search across all folders
 - ✅ Support for standard Obsidian checkboxes (`- [ ]` and `- [x]`)
 
+
 ## Project Structure
 
 ```
