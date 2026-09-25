@@ -1,4 +1,4 @@
-# Obsidian MCP Server 🧠🔗
+# Obsidian MCP Server 
 
 Um servidor [Model Context Protocol (MCP)](https://modelcontextprotocol.io) que conecta seu vault Obsidian diretamente ao Claude e Cursor, permitindo que você gerencie seus to-dos sem reescrever tarefas.
 
