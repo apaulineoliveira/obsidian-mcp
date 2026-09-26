@@ -10,7 +10,7 @@ fr (French), de (German), it (Italian)
 
 from typing import Optional
 
-# Language keywords for priority normalization
+
 LANGUAGES = {
     'priority': {
         'high': {
@@ -48,7 +48,7 @@ LANGUAGES = {
     }
 }
 
-# Emoji mapping (universal - doesn't change by language)
+
 EMOJI_PRIORITY = {
     '🔴': 'high',
     '🟡': 'medium',
@@ -133,22 +133,22 @@ def normalize_priority(
     
     priority_str = priority_str.lower().strip()
     
-    # Check emoji first (universal - works in all languages)
+    
     if priority_str in EMOJI_PRIORITY:
         return EMOJI_PRIORITY[priority_str]
     
-    # Search through each priority level
+    
     for priority_level, translations in LANGUAGES['priority'].items():
-        # Try the specified language
+        
         if language in translations:
             if priority_str in translations[language]:
                 return priority_level
         
-        # Fallback to English if language not found
+        
         if 'en' in translations and priority_str in translations['en']:
             return priority_level
     
-    # Not found - return original string
+   
     return priority_str
 
 
@@ -254,10 +254,10 @@ def print_supported_keywords():
 
 
 if __name__ == "__main__":
-    # When run directly, show all supported keywords
+    
     print_supported_keywords()
     
-    # Test some examples
+    
     print("🧪 TEST EXAMPLES\n")
     
     test_cases = [
