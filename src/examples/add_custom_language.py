@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 Example: How to Add Custom Languages to Obsidian MCP Server
 
@@ -16,9 +16,6 @@ Run this before starting the MCP server to load your custom languages!
 from src.i18n import add_language, normalize_priority, print_supported_keywords
 
 
-# ============================================================================
-# EXAMPLE 1: Add Japanese Support
-# ============================================================================
 
 def add_japanese():
     """Adiciona suporte para Japonês"""
@@ -34,9 +31,6 @@ def add_japanese():
         print(f"❌ Error adding Japanese: {e}\n")
 
 
-# ============================================================================
-# EXAMPLE 2: Add Chinese (Simplified) Support
-# ============================================================================
 
 def add_chinese_simplified():
     """Adiciona suporte para Chinês Simplificado"""
@@ -52,9 +46,6 @@ def add_chinese_simplified():
         print(f"❌ Error adding Chinese: {e}\n")
 
 
-# ============================================================================
-# EXAMPLE 3: Add Russian Support
-# ============================================================================
 
 def add_russian():
     """Adiciona suporte para Russo"""
@@ -70,9 +61,6 @@ def add_russian():
         print(f"❌ Error adding Russian: {e}\n")
 
 
-# ============================================================================
-# EXAMPLE 4: Add Greek Support
-# ============================================================================
 
 def add_greek():
     """Adiciona suporte para Grego"""
@@ -88,9 +76,6 @@ def add_greek():
         print(f"❌ Error adding Greek: {e}\n")
 
 
-# ============================================================================
-# EXAMPLE 5: Add Korean Support
-# ============================================================================
 
 def add_korean():
     """Adiciona suporte para Coreano"""
@@ -106,10 +91,6 @@ def add_korean():
         print(f"❌ Error adding Korean: {e}\n")
 
 
-# ============================================================================
-# TESTING
-# ============================================================================
-
 def test_custom_languages():
     """Test all custom languages with examples"""
     
@@ -117,28 +98,27 @@ def test_custom_languages():
     print("🧪 TESTING CUSTOM LANGUAGES")
     print("="*60 + "\n")
     
-    # Test cases: (input, language, expected_output)
+  
     test_cases = [
-        # Japanese
         ("高", "ja", "high"),
         ("中", "ja", "medium"),
         ("低", "ja", "low"),
         
-        # Chinese
+        
         ("高", "zh", "high"),
         ("中", "zh", "medium"),
         ("紧急", "zh", "high"),
         
-        # Russian
+        
         ("срочно", "ru", "high"),
         ("обычный", "ru", "medium"),
         ("низкий", "ru", "low"),
         
-        # Greek
+        
         ("επείγον", "el", "high"),
         ("κανονικό", "el", "medium"),
         
-        # Korean
+        
         ("긴급", "ko", "high"),
         ("중간", "ko", "medium"),
     ]
@@ -171,10 +151,6 @@ def test_custom_languages():
     
     print(f"\n📊 Results: {passed} passed, {failed} failed\n")
 
-
-# ============================================================================
-# HOW TO USE THIS FILE
-# ============================================================================
 
 def show_usage():
     """Show usage instructions"""
@@ -230,18 +206,14 @@ def show_usage():
     """)
 
 
-# ============================================================================
-# MAIN
-# ============================================================================
-
 if __name__ == "__main__":
     import sys
     
-    # Show menu if no arguments
+   
     if len(sys.argv) == 1:
         show_usage()
     
-    # Parse arguments
+  
     args = sys.argv[1:]
     
     if '--add-all' in args:
