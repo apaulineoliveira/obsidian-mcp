@@ -321,6 +321,391 @@ python3.11
 - [Claude Desktop Setup](https://support.anthropic.com/en/articles/8784710-claude-desktop)
 - [Obsidian API](https://docs.obsidian.md/)
 
+# Usage Examples - Advanced Filters
+
+This document shows how to use the 3 filtering methods in Obsidian MCP Server.
+
+---
+
+## 1️⃣ Inline Tags (`#tag`)
+
+### File: `Projects/oloroke-notes.md`
+
+```markdown
+# Oloroke Improvements
+
+- [ ] Implement OAuth authentication #urgent #backend
+- [ ] Improve carousel performance #performance #frontend
+- [ ] Add unit tests #testing #backend
+- [x] Review UI/UX #design #completed
+- [ ] Document API #documentation #backend
+```
+
+### How to call in Claude:
+
+```
+Show me all tasks with tag #urgent from oloroke
+```
+
+Claude automatically calls:
+```python
+get_todos(folder="Projects/oloroke-notes", tag="urgent")
+```
+
+Returns:
+```json
+{
+  "todos": [
+    {
+      "file": "Projects/oloroke-notes.md",
+      "line": 2,
+      "completed": false,
+      "text": "Implement OAuth authentication",
+      "tags": ["urgent", "backend"],
+      "priority": null,
+      "project": null
+    }
+  ],
+  "count": 1
+}
+```
+
+### Example questions:
+
+```
+Which tasks have #backend?
+Show me tasks with #testing
+Execute all #urgent tasks from oloroke
+```
+
+---
+
+## 2️⃣ Priority with Emoji (`🔴🟡🟢⚫`)
+
+### File: `Projects/oloroke-notes.md`
+
+```markdown
+# Oloroke Improvements
+
+- [ ] 🔴 Implement OAuth authentication
+- [ ] 🟡 Improve carousel performance
+- [ ] 🟢 Add unit tests
+- [x] 🔵 Review UI/UX
+- [ ] 🟡 Document API
+- [ ] ⚫ Database migration (blocked)
+```
+
+### Emoji Legend:
+
+| Emoji | Meaning | Flag |
+|-------|---------|------|
+| 🔴 | High priority | `priority="high"` |
+| 🟡 | Medium priority | `priority="medium"` |
+| 🟢 | Low priority | `priority="low"` |
+| ⚫ | Blocked | `priority="blocked"` |
+
+### How to call in Claude:
+
+```
+Show me high priority tasks from oloroke
+```
+
+Claude automatically calls:
+```python
+get_todos(folder="Projects/oloroke-notes", priority="high")
+```
+
+Returns:
+```json
+{
+  "todos": [
+    {
+      "file": "Projects/oloroke-notes.md",
+      "line": 2,
+      "completed": false,
+      "text": "Implement OAuth authentication",
+      "tags": [],
+      "priority": "high",
+      "project": null
+    }
+  ],
+  "count": 1
+}
+```
+
+### Example questions:
+
+```
+Which are the red tasks (🔴)?
+Show me everything that's blocked (⚫)
+Execute medium priority tasks
+```
+
+---
+
+## 3️⃣ YAML Frontmatter (More Structured)
+
+### File: `Projects/oloroke-notes.md`
+
+```markdown
+---
+projeto: oloroke
+prioridade: alta
+tags: [urgent, backend]
+responsavel: Pauline
+deadline: 2024-12-31
+---
+
+# Oloroke Improvements
+
+- [ ] Implement OAuth authentication
+- [ ] Improve carousel performance
+- [x] Review UI/UX
+
+---
+projeto: oloroke
+prioridade: média
+tags: [testing, refactor]
+---
+
+## Tests and Refactor
+
+- [ ] Add unit tests
+- [ ] Clean up legacy code
+```
+
+### Frontmatter Structure:
+
+```yaml
+---
+projeto: project-name              # Identifies the project
+prioridade: high|medium|low        # General priority for the note
+tags: [tag1, tag2, tag3]           # Tags applied to ALL to-dos
+responsavel: Person's Name          # Who is responsible
+deadline: YYYY-MM-DD               # Deadline (you can use for filtering)
+---
+```
+
+### How to call in Claude:
+
+```
+Show me all tasks from oloroke project with high priority
+```
+
+Claude calls:
+```python
+get_todos(folder="Projects/oloroke-notes", priority="high")
+```
+
+Returns:
+```json
+{
+  "todos": [
+    {
+      "file": "Projects/oloroke-notes.md",
+      "line": 0,
+      "completed": false,
+      "text": "Implement OAuth authentication",
+      "tags": ["urgent", "backend"],
+      "priority": "high",
+      "project": "oloroke"
+    },
+    {
+      "file": "Projects/oloroke-notes.md",
+      "line": 1,
+      "completed": false,
+      "text": "Improve carousel performance",
+      "tags": ["urgent", "backend"],
+      "priority": "high",
+      "project": "oloroke"
+    }
+  ],
+  "count": 2
+}
+```
+
+### Example questions:
+
+```
+What tasks are in oloroke project?
+Show me everything about terreiro-app project
+Execute high priority tasks from petlove
+```
+
+---
+
+## Combining All Methods
+
+### File: `Projects/oloroke-notes.md`
+
+```markdown
+---
+projeto: oloroke
+tags: [oloroke, app]
+---
+
+# Oloroke - Priority Tasks
+
+## Backend
+
+- [ ] 🔴 Implement OAuth authentication #urgent #backend
+- [ ] 🟡 Improve carousel performance #performance #backend
+- [ ] 🟢 Add unit tests #testing
+
+## Frontend
+
+- [ ] 🔴 Review interface design #urgent #design
+- [ ] 🟡 Implement dark mode #ui #frontend
+- [ ] ⚫ TypeScript migration #blocked #refactor
+```
+
+Here you have:
+1. **Frontmatter**: Identifies project `oloroke` and general tags
+2. **Inline tags**: Specifies `#urgent`, `#backend`, `#testing`, etc
+3. **Emoji**: Shows visual priority `🔴🟡🟢⚫`
+
+### Powerful example questions:
+
+```
+"Execute all urgent (#urgent) tasks from oloroke project"
+→ get_todos(folder="Projects/oloroke-notes", tag="urgent", project="oloroke")
+
+"Which tasks are blocked that I need to unblock?"
+→ get_todos(priority="blocked")
+
+"What backend (#backend) work needs high priority?"
+→ get_todos(tag="backend", priority="high")
+
+"Which incomplete tasks from oloroke have #urgent?"
+→ get_todos(folder="Projects/oloroke-notes", tag="urgent", completed=False)
+```
+
+---
+
+## Comparison: Which to Use?
+
+| Method | Pros | Cons | Best For |
+|--------|------|------|----------|
+| **Inline Tags** | Flexible, easy to add | Can pollute the line | Quick categorizations |
+| **Emoji** | Visual, intuitive | Limited to 4 priorities | Quick priority view |
+| **Frontmatter** | Structured, rich metadata | More work to maintain | Complex projects |
+| **All 3** | Maximum flexibility | None! | Recommended! |
+
+---
+
+## Installing Advanced Version
+
+1. Replace `src/obsidian_mcp.py` with the advanced version
+
+2. Update `requirements.txt`:
+```bash
+cat > requirements.txt << 'EOF'
+mcp>=0.2.0
+python-dotenv>=1.0.0
+pyyaml>=6.0
+EOF
+```
+
+3. Reinstall dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Restart Claude Desktop and Cursor
+
+---
+
+## Pro Tips
+
+### 1. Organize by project
+```markdown
+---
+projeto: oloroke
+---
+```
+
+### 2. Use tags for categories
+```markdown
+- [ ] Task #backend #urgent #oauth
+```
+
+### 3. Combine with emoji for quick visualization
+```markdown
+- [ ] 🔴 #urgent Critical thing
+```
+
+### 4. Add useful metadata in frontmatter
+```yaml
+---
+projeto: oloroke
+deadline: 2024-12-31
+responsavel: Pauline
+reviewed_on: 2024-09-25
+---
+```
+
+### 5. Aggregate related notes
+Create a folder per project:
+```
+Projects/
+├── oloroke-notes.md
+├── terreiro-app-notes.md
+└── petlove-improvements.md
+```
+
+Then ask:
+```
+"What are all the tasks in the Projects folder?"
+```
+
+---
+
+## Real Conversation Examples
+
+### Conversation 1: Explore a project
+
+```
+You: What projects do I have?
+Claude: [lists via list_projects()]
+
+You: Show me high priority tasks from oloroke
+Claude: [calls get_todos(project="oloroke", priority="high")]
+         Shows 3 tasks 🔴
+
+You: Execute the first one (OAuth)
+Claude: [calls update_todo()]
+        Marks as complete and confirms
+```
+
+### Conversation 2: Filter by context
+
+```
+You: I'm working on tests now
+Claude: Understood, show me only tasks with #testing tag
+Claude: [calls get_todos(tag="testing")]
+         Shows 2 test tasks
+
+You: Mark the first one as complete
+Claude: [calls update_todo()]
+```
+
+### Conversation 3: Combine filters
+
+```
+You: What's my most urgent backend work in oloroke?
+Claude: [calls get_todos(
+  folder="Projects/oloroke-notes",
+  tag="backend",
+  priority="high",
+  completed=False
+)]
+Shows: "Implement OAuth authentication"
+```
+
+---
+
+Done! Now you have **3 powerful ways** to organize your tasks in Obsidian and Claude can filter exactly what you need. 
+
 ## License
 
 MIT - Use freely! If you make improvements, consider submitting a pull request 
