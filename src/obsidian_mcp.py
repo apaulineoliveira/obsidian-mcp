@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Obsidian MCP Server with Advanced Filtering and Multilingual Support
 
@@ -21,7 +20,7 @@ try:
 except ImportError:
     yaml = None
 
-# Import i18n module for multilingual support
+
 from i18n import (
     normalize_priority, 
     extract_priority_emoji,
@@ -31,11 +30,6 @@ from i18n import (
 vault_path = Path(os.getenv("OBSIDIAN_VAULT_PATH", os.path.expanduser("~/Obsidian")))
 
 mcp = MCPServer("obsidian-mcp")
-
-
-# ============================================================================
-# HELPERS - Utility functions for parsing
-# ============================================================================
 
 def extract_tags(text: str) -> list[str]:
     """Extrai tags de uma linha: #urgente #backend -> ['urgente', 'backend']"""
@@ -88,13 +82,13 @@ def extract_frontmatter(content: str) -> tuple[dict, str]:
 def matches_filter(todo: dict, tag: Optional[str], priority: Optional[str]) -> bool:
     """Verifica se um to-do passa nos filtros"""
     
-    # Filtro por tag
+   
     if tag:
         todo_tags = todo.get('tags', [])
         if tag.lower() not in [t.lower() for t in todo_tags]:
             return False
     
-    # Filtro por prioridade
+    
     if priority:
         todo_priority = todo.get('priority')
         if todo_priority != priority:
@@ -103,9 +97,6 @@ def matches_filter(todo: dict, tag: Optional[str], priority: Optional[str]) -> b
     return True
 
 
-# ============================================================================
-# MCP TOOLS
-# ============================================================================
 
 @mcp.tool()
 def get_todos(
@@ -146,15 +137,15 @@ def get_todos(
             with open(md_file, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Extrai frontmatter (se houver)
+            
             file_metadata, body_content = extract_frontmatter(content)
             
-            # Tags do frontmatter
+           
             frontmatter_tags = file_metadata.get('tags', [])
             if isinstance(frontmatter_tags, str):
                 frontmatter_tags = [frontmatter_tags]
             
-            # Prioridade do frontmatter (com suporte multilíngue!)
+           
             frontmatter_priority_raw = file_metadata.get('prioridade') or file_metadata.get('priority')
             frontmatter_priority = normalize_priority(frontmatter_priority_raw, language=language)
             
@@ -164,21 +155,21 @@ def get_todos(
                 if "- [ ]" in line or "- [x]" in line:
                     is_completed = "[x]" in line
                     
-                    # Filtro por completed
+                    
                     if completed is not None and is_completed != completed:
                         continue
                     
-                    # Extrai informações da linha
+                   
                     inline_tags = extract_tags(line)
                     inline_priority = extract_priority_emoji(line)
                     
-                    # Combina tags (frontmatter + inline)
+                    
                     all_tags = list(set(frontmatter_tags + inline_tags))
                     
-                    # Prioridade: inline sobrescreve frontmatter
+                   
                     final_priority = inline_priority or frontmatter_priority
                     
-                    # Limpa a linha de emojis e tags para exibição
+                    
                     clean_text = line.strip()
                     clean_text = re.sub(r'🔴|🟡|🟢|⚫', '', clean_text).strip()
                     clean_text = re.sub(r'#\w+', '', clean_text).strip()
@@ -194,12 +185,12 @@ def get_todos(
                         "project": file_metadata.get('projeto') or file_metadata.get('project')
                     }
                     
-                    # Aplica filtros
+                    
                     if matches_filter(todo, tag, priority):
                         todos.append(todo)
         
         except Exception as e:
-            # Ignora arquivos que não consegue ler
+            
             pass
 
     return json.dumps({
