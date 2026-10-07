@@ -1,721 +1,91 @@
-# Obsidian MCP Server 
+# Obsidian MCP Server
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that connects your Obsidian vault directly to Claude and Cursor, allowing you to manage your to-dos without retyping tasks.
+An [MCP](https://modelcontextprotocol.io) server that connects your Obsidian vault to Claude Desktop and Cursor, so the AI can read, filter and complete your to-dos without you copying and pasting them.
 
-**Portuguese version:** [README.pt.md](README.pt.md)
+🇧🇷 [Versão em português](README.pt.md)
 
-## What is MCP?
+## What it can do
 
-**Model Context Protocol** is an open protocol that allows integrating external tools (like your Obsidian) with AIs (Claude, Cursor, etc). Think of it as a "universal adapter" that tells Claude: "Hey, you can use these tools to access my to-dos in Obsidian".
+| Tool | Description |
+|------|-------------|
+| `get_todos` | Lists to-dos (`- [ ]` / `- [x]`) from the whole vault, filterable by `folder`, `tag`, `priority`, `completed` and `language` |
+| `update_todo` | Marks a to-do as done/undone (by note path and line number) |
+| `get_note_content` | Returns the full content of a note |
+| `list_projects` | Lists projects found in notes' frontmatter |
+| `get_supported_languages` | Lists languages accepted for priority keywords |
 
-Without MCP, you'd have to copy and paste your tasks every time. With MCP, Claude accesses directly.
+### Organizing your to-dos (all optional, can be combined)
 
-## Features
+- **Inline tags:** `- [ ] Fix login #urgent #backend`
+- **Priority emoji:** 🔴 high · 🟡 medium · 🟢 low · ⚫ blocked
+- **YAML frontmatter:** `projeto`/`project`, `prioridade`/`priority`, `tags`
 
-- ✅ **List all to-dos** from your Obsidian vault automatically
-- ✅ **Mark tasks as complete** directly via Claude/Cursor
-- ✅ **Read entire notes** for context
-- ✅ **Works with Claude Desktop** and **Cursor** simultaneously
-- ✅ Recursive search across all folders
-- ✅ Support for standard Obsidian checkboxes (`- [ ]` and `- [x]`)
-
-
-## Project Structure
-
-```
-obsidian-mcp-server/
-├── src/
-│   ├── __init__.py              # Marks folder as Python package
-│   └── obsidian_mcp.py          # Main MCP server (critical file)
-│
-├── venv/                        # Python virtual environment (ignored in git)
-│
-├── requirements.txt             # Project dependencies
-├── .env.example                 # Configuration template
-├── .gitignore                   # Files ignored by git
-├── README.md                    # Portuguese documentation
-├── README.en.md                 # English documentation
-└── setup.py                     # Package metadata (optional)
+```markdown
+---
+project: oloroke
+priority: high
+tags: [backend]
+---
+- [ ] 🔴 Implement OAuth #urgent
 ```
 
-### What each file does:
+Priority keywords work in **pt, en, es, fr, de, it**. To add another language, see [src/examples/add_custom_language.py](src/examples/add_custom_language.py).
 
-| File | Function |
-|------|----------|
-| `src/obsidian_mcp.py` | **Heart of the project**. Defines 3 tools: `get_todos`, `get_note_content`, `update_todo`. Uses `MCPServer` to communicate with Claude/Cursor via MCP protocol |
-| `venv/bin/python3` | Isolated Python with MCP packages installed. When Claude calls the server, it runs this Python |
-| `requirements.txt` | Lists packages: `mcp>=0.2.0` and `python-dotenv>=1.0.0`. Installed with `pip install -r requirements.txt` |
-| `.env` | Your local file (not committed) with `OBSIDIAN_VAULT_PATH=/Users/you/Documents` |
-| `claude_desktop_config.json` | Config that Claude Desktop reads from `~/Library/Application Support/Claude/` to know about the server |
-| `mcp.json` | Config that Cursor reads from `~/.cursor/` to know about the server |
+Example prompts: *"Show my high-priority #backend tasks"* · *"What's blocked in Projects/oloroke?"* · *"Mark line 5 of Projects/x.md as done"*
 
-## Installation
+## Requirements
 
-### Prerequisites
+- macOS, Python 3.11+
+- Claude Desktop or Cursor
+- An Obsidian vault
 
-- macOS (tested on 11.0+)
-- Python 3.11 or higher
-- Homebrew (to install Python)
-- Claude Desktop or Cursor installed
-- An existing Obsidian vault
-
-### Step 1: Clone or Create the Project
+## Setup
 
 ```bash
-# If cloning from GitHub:
-git clone git@github.com:YOUR-USER/obsidian-mcp.git
+git clone git@github.com:apaulineoliveira/obsidian-mcp.git
 cd obsidian-mcp
-
-# Or create from scratch:
-mkdir obsidian-mcp
-cd obsidian-mcp
-```
-
-### Step 2: Create Python Virtual Environment
-
-```bash
 python3.11 -m venv venv
 source venv/bin/activate
-```
-
-Your prompt should appear like this:
-```
-(venv) obsidian-mcp %
-```
-
-### Step 3: Install Dependencies
-
-```bash
-pip install --upgrade pip
 pip install -r requirements.txt
+cp .env.example .env   # set OBSIDIAN_VAULT_PATH to your vault's full path
 ```
 
-This installs:
-- `mcp` (2.2.0+) — the MCP protocol
-- `python-dotenv` — to read environment variables
+Register the server in your client config, using **absolute paths**:
 
-### Step 4: Create `.env` File
+- Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Cursor: `~/.cursor/mcp.json`
 
-```bash
-# Copy the template:
-cp .env.example .env
-
-# Open and replace the path:
-nano .env
-```
-
-Find your vault path:
-1. Open Obsidian
-2. Go to **Settings** → **About**
-3. Look for **Vault location:**
-4. Copy the full path and paste in `.env`
-
-Example:
-```env
-OBSIDIAN_VAULT_PATH=/Users/pauline/Documents/MyVault
-```
-
-Save (Ctrl+X, then `y` and Enter).
-
-### Step 5: Test the Server Locally
-
-```bash
-python3 src/obsidian_mcp.py
-```
-
-If it works, the terminal waits (no error should appear). Press **Ctrl+C** to exit.
-
-## Configuration (Claude Desktop + Cursor)
-
-### Claude Desktop
-
-1. Create the configuration folder:
-```bash
-mkdir -p ~/Library/Application\ Support/Claude
-```
-
-2. Create the `claude_desktop_config.json` file:
-```bash
-cat > ~/Library/Application\ Support/Claude/claude_desktop_config.json << 'EOF'
+```json
 {
   "mcpServers": {
     "obsidian-mcp": {
-      "command": "/full/path/to/obsidian-mcp/venv/bin/python3",
-      "args": [
-        "/full/path/to/obsidian-mcp/src/obsidian_mcp.py"
-      ],
-      "env": {
-        "OBSIDIAN_VAULT_PATH": "/Users/your-username/Documents/your-vault"
-      }
+      "command": "/abs/path/to/obsidian-mcp/venv/bin/python3",
+      "args": ["/abs/path/to/obsidian-mcp/src/obsidian_mcp.py"],
+      "env": { "OBSIDIAN_VAULT_PATH": "/abs/path/to/your/vault" }
     }
   }
 }
-EOF
 ```
 
-**Replace:**
-- `/full/path/to/obsidian-mcp` → the real path (ex: `/Users/pauline/Documents/obsidian-mcp`)
-- `/Users/your-username/Documents/your-vault` → your vault
-
-3. Restart Claude Desktop (Cmd+Q and open again)
-
-### Cursor
-
-1. Create the folder:
-```bash
-mkdir -p ~/.cursor
-```
-
-2. Create the `mcp.json` file:
-```bash
-cat > ~/.cursor/mcp.json << 'EOF'
-{
-  "mcpServers": {
-    "obsidian-mcp": {
-      "command": "/full/path/to/obsidian-mcp/venv/bin/python3",
-      "args": [
-        "/full/path/to/obsidian-mcp/src/obsidian_mcp.py"
-      ],
-      "env": {
-        "OBSIDIAN_VAULT_PATH": "/Users/your-username/Documents/your-vault"
-      }
-    }
-  }
-}
-EOF
-```
-
-3. Restart Cursor (Cmd+Q and open again)
-
-## How to Use
-
-### In Claude Desktop
-
-Open a conversation and ask anything related to tasks:
-
-```
-What are my to-dos in Obsidian?
-```
-
-Claude will:
-1. Call the `get_todos` tool
-2. Receive JSON with all tasks (167 in your case!)
-3. Format and display readably
-
-You can also do:
-```
-Mark the task "Deploy the app" in Projects/project-x.md line 5 as complete
-```
-
-Claude will automatically call `update_todo`.
-
-### In Cursor
-
-Access the Claude tab (left side) and ask the same questions. Behavior is identical.
-
-## How It Works Under the Hood
-
-```
-Claude/Cursor (AIs)
-       ↓
-claude_desktop_config.json / mcp.json (configs)
-       ↓
-OS Executor (reads config and runs Python command)
-       ↓
-/venv/bin/python3 src/obsidian_mcp.py (server running)
-       ↓
-MCPServer ("listens" for MCP requests)
-       ↓
-Functions decorated with @mcp.tool():
-  - get_todos()         → Sweeps .rglob("*.md"), extracts checkboxes
-  - get_note_content()  → Opens file and returns content
-  - update_todo()       → Writes [ ] or [x] and saves file
-       ↓
-JSON responses
-       ↓
-Claude/Cursor displays to you
-```
-
-## Code Structure
-
-### `src/obsidian_mcp.py` - The Jewel
-
-```python
-from mcp.server.mcpserver import MCPServer
-
-mcp = MCPServer("obsidian-mcp")
-
-@mcp.tool()
-def get_todos(folder: Optional[str] = None) -> str:
-    """Tool 1: Lists all to-dos"""
-    # Sweeps vault_path recursively with .rglob("*.md")
-    # Searches for lines with "- [ ]" or "- [x]"
-    # Returns JSON with {file, line, completed, text}
-
-@mcp.tool()
-def get_note_content(note_path: str) -> str:
-    """Tool 2: Reads entire note"""
-    # Opens file and returns raw content
-
-@mcp.tool()
-def update_todo(note_path: str, line_number: int, completed: bool) -> str:
-    """Tool 3: Marks task as done/not done"""
-    # Reads file, replaces [ ] with [x] (or vice versa), saves
-
-if __name__ == "__main__":
-    mcp.run()  # Starts MCP server via stdio
-```
-
-### Task Flow
-
-1. **User**: "Show me my to-dos"
-2. **Claude**: Calls `get_todos()` via MCP
-3. **Server** (your code):
-   - Reads `OBSIDIAN_VAULT_PATH` variable
-   - Traverses all folders with `.rglob("*.md")`
-   - For each file, searches for lines with `"- [ ]"` or `"- [x]"`
-   - Returns JSON: `{"todos": [...], "count": 167}`
-4. **Claude**: Receives JSON, formats nicely and displays
-5. **You**: See your 167 to-dos listed
+Fully quit (Cmd+Q) and reopen the client. Then just ask: *"What are my to-dos in Obsidian?"*
 
 ## Troubleshooting
 
-### "I don't have access to your Obsidian"
+- **Claude can't see the server:** check that the config JSON is valid, the paths exist, and you restarted the client.
+- **`ModuleNotFoundError: mcp`:** `command` must point to `venv/bin/python3`, not the system Python.
+- **No to-dos returned:** check `OBSIDIAN_VAULT_PATH` and that tasks use the `- [ ]` format.
 
-Means Claude couldn't connect to the server. Check:
+## Found a bug?
 
-1. **Config file exists?**
-   ```bash
-   cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
-   ```
-
-2. **Python path is correct?**
-   ```bash
-   ls /path/you/put/venv/bin/python3
-   ```
-   If not found, use the real path (run `which python3` with venv activated)
-
-3. **Vault path is correct?**
-   ```bash
-   ls /Users/your-username/your-vault
-   ```
-
-4. **Restarted Claude Desktop after editing config?**
-
-### "ModuleNotFoundError: No module named 'mcp'"
-
-Means it's running the wrong Python (not from venv). Check the path in `claude_desktop_config.json`:
-
-```bash
-# Must be THIS:
-/Users/pauline/Documents/obsidian-mcp/venv/bin/python3
-
-# Not this:
-python3.11
-```
-
-## Resources
-
-- [Model Context Protocol - Official Docs](https://modelcontextprotocol.io)
-- [Python MCP SDK](https://py.sdk.modelcontextprotocol.io)
-- [Claude Desktop Setup](https://support.anthropic.com/en/articles/8784710-claude-desktop)
-- [Obsidian API](https://docs.obsidian.md/)
-
-# Usage Examples - Advanced Filters
-
-This document shows how to use the 3 filtering methods in Obsidian MCP Server.
-
----
-
-## 1️⃣ Inline Tags (`#tag`)
-
-### File: `Projects/oloroke-notes.md`
-
-```markdown
-# Oloroke Improvements
-
-- [ ] Implement OAuth authentication #urgent #backend
-- [ ] Improve carousel performance #performance #frontend
-- [ ] Add unit tests #testing #backend
-- [x] Review UI/UX #design #completed
-- [ ] Document API #documentation #backend
-```
-
-### How to call in Claude:
-
-```
-Show me all tasks with tag #urgent from oloroke
-```
-
-Claude automatically calls:
-```python
-get_todos(folder="Projects/oloroke-notes", tag="urgent")
-```
-
-Returns:
-```json
-{
-  "todos": [
-    {
-      "file": "Projects/oloroke-notes.md",
-      "line": 2,
-      "completed": false,
-      "text": "Implement OAuth authentication",
-      "tags": ["urgent", "backend"],
-      "priority": null,
-      "project": null
-    }
-  ],
-  "count": 1
-}
-```
-
-### Example questions:
-
-```
-Which tasks have #backend?
-Show me tasks with #testing
-Execute all #urgent tasks from oloroke
-```
-
----
-
-## 2️⃣ Priority with Emoji (`🔴🟡🟢⚫`)
-
-### File: `Projects/oloroke-notes.md`
-
-```markdown
-# Oloroke Improvements
-
-- [ ] 🔴 Implement OAuth authentication
-- [ ] 🟡 Improve carousel performance
-- [ ] 🟢 Add unit tests
-- [x] 🔵 Review UI/UX
-- [ ] 🟡 Document API
-- [ ] ⚫ Database migration (blocked)
-```
-
-### Emoji Legend:
-
-| Emoji | Meaning | Flag |
-|-------|---------|------|
-| 🔴 | High priority | `priority="high"` |
-| 🟡 | Medium priority | `priority="medium"` |
-| 🟢 | Low priority | `priority="low"` |
-| ⚫ | Blocked | `priority="blocked"` |
-
-### How to call in Claude:
-
-```
-Show me high priority tasks from oloroke
-```
-
-Claude automatically calls:
-```python
-get_todos(folder="Projects/oloroke-notes", priority="high")
-```
-
-Returns:
-```json
-{
-  "todos": [
-    {
-      "file": "Projects/oloroke-notes.md",
-      "line": 2,
-      "completed": false,
-      "text": "Implement OAuth authentication",
-      "tags": [],
-      "priority": "high",
-      "project": null
-    }
-  ],
-  "count": 1
-}
-```
-
-### Example questions:
-
-```
-Which are the red tasks (🔴)?
-Show me everything that's blocked (⚫)
-Execute medium priority tasks
-```
-
----
-
-## 3️⃣ YAML Frontmatter (More Structured)
-
-### File: `Projects/oloroke-notes.md`
-
-```markdown
----
-projeto: oloroke
-prioridade: alta
-tags: [urgent, backend]
-responsavel: Pauline
-deadline: 2024-12-31
----
-
-# Oloroke Improvements
-
-- [ ] Implement OAuth authentication
-- [ ] Improve carousel performance
-- [x] Review UI/UX
-
----
-projeto: oloroke
-prioridade: média
-tags: [testing, refactor]
----
-
-## Tests and Refactor
-
-- [ ] Add unit tests
-- [ ] Clean up legacy code
-```
-
-### Frontmatter Structure:
-
-```yaml
----
-projeto: project-name              # Identifies the project
-prioridade: high|medium|low        # General priority for the note
-tags: [tag1, tag2, tag3]           # Tags applied to ALL to-dos
-responsavel: Person's Name          # Who is responsible
-deadline: YYYY-MM-DD               # Deadline (you can use for filtering)
----
-```
-
-### How to call in Claude:
-
-```
-Show me all tasks from oloroke project with high priority
-```
-
-Claude calls:
-```python
-get_todos(folder="Projects/oloroke-notes", priority="high")
-```
-
-Returns:
-```json
-{
-  "todos": [
-    {
-      "file": "Projects/oloroke-notes.md",
-      "line": 0,
-      "completed": false,
-      "text": "Implement OAuth authentication",
-      "tags": ["urgent", "backend"],
-      "priority": "high",
-      "project": "oloroke"
-    },
-    {
-      "file": "Projects/oloroke-notes.md",
-      "line": 1,
-      "completed": false,
-      "text": "Improve carousel performance",
-      "tags": ["urgent", "backend"],
-      "priority": "high",
-      "project": "oloroke"
-    }
-  ],
-  "count": 2
-}
-```
-
-### Example questions:
-
-```
-What tasks are in oloroke project?
-Show me everything about terreiro-app project
-Execute high priority tasks from petlove
-```
-
----
-
-## Combining All Methods
-
-### File: `Projects/oloroke-notes.md`
-
-```markdown
----
-projeto: oloroke
-tags: [oloroke, app]
----
-
-# Oloroke - Priority Tasks
-
-## Backend
-
-- [ ] 🔴 Implement OAuth authentication #urgent #backend
-- [ ] 🟡 Improve carousel performance #performance #backend
-- [ ] 🟢 Add unit tests #testing
-
-## Frontend
-
-- [ ] 🔴 Review interface design #urgent #design
-- [ ] 🟡 Implement dark mode #ui #frontend
-- [ ] ⚫ TypeScript migration #blocked #refactor
-```
-
-Here you have:
-1. **Frontmatter**: Identifies project `oloroke` and general tags
-2. **Inline tags**: Specifies `#urgent`, `#backend`, `#testing`, etc
-3. **Emoji**: Shows visual priority `🔴🟡🟢⚫`
-
-### Powerful example questions:
-
-```
-"Execute all urgent (#urgent) tasks from oloroke project"
-→ get_todos(folder="Projects/oloroke-notes", tag="urgent", project="oloroke")
-
-"Which tasks are blocked that I need to unblock?"
-→ get_todos(priority="blocked")
-
-"What backend (#backend) work needs high priority?"
-→ get_todos(tag="backend", priority="high")
-
-"Which incomplete tasks from oloroke have #urgent?"
-→ get_todos(folder="Projects/oloroke-notes", tag="urgent", completed=False)
-```
-
----
-
-## Comparison: Which to Use?
-
-| Method | Pros | Cons | Best For |
-|--------|------|------|----------|
-| **Inline Tags** | Flexible, easy to add | Can pollute the line | Quick categorizations |
-| **Emoji** | Visual, intuitive | Limited to 4 priorities | Quick priority view |
-| **Frontmatter** | Structured, rich metadata | More work to maintain | Complex projects |
-| **All 3** | Maximum flexibility | None! | Recommended! |
-
----
-
-## Installing Advanced Version
-
-1. Replace `src/obsidian_mcp.py` with the advanced version
-
-2. Update `requirements.txt`:
-```bash
-cat > requirements.txt << 'EOF'
-mcp>=0.2.0
-python-dotenv>=1.0.0
-pyyaml>=6.0
-EOF
-```
-
-3. Reinstall dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Restart Claude Desktop and Cursor
-
----
-
-## Pro Tips
-
-### 1. Organize by project
-```markdown
----
-projeto: oloroke
----
-```
-
-### 2. Use tags for categories
-```markdown
-- [ ] Task #backend #urgent #oauth
-```
-
-### 3. Combine with emoji for quick visualization
-```markdown
-- [ ] 🔴 #urgent Critical thing
-```
-
-### 4. Add useful metadata in frontmatter
-```yaml
----
-projeto: oloroke
-deadline: 2024-12-31
-responsavel: Pauline
-reviewed_on: 2024-09-25
----
-```
-
-### 5. Aggregate related notes
-Create a folder per project:
-```
-Projects/
-├── oloroke-notes.md
-├── terreiro-app-notes.md
-└── petlove-improvements.md
-```
-
-Then ask:
-```
-"What are all the tasks in the Projects folder?"
-```
-
----
-
-## Real Conversation Examples
-
-### Conversation 1: Explore a project
-
-```
-You: What projects do I have?
-Claude: [lists via list_projects()]
-
-You: Show me high priority tasks from oloroke
-Claude: [calls get_todos(project="oloroke", priority="high")]
-         Shows 3 tasks 🔴
-
-You: Execute the first one (OAuth)
-Claude: [calls update_todo()]
-        Marks as complete and confirms
-```
-
-### Conversation 2: Filter by context
-
-```
-You: I'm working on tests now
-Claude: Understood, show me only tasks with #testing tag
-Claude: [calls get_todos(tag="testing")]
-         Shows 2 test tasks
-
-You: Mark the first one as complete
-Claude: [calls update_todo()]
-```
-
-### Conversation 3: Combine filters
-
-```
-You: What's my most urgent backend work in oloroke?
-Claude: [calls get_todos(
-  folder="Projects/oloroke-notes",
-  tag="backend",
-  priority="high",
-  completed=False
-)]
-Shows: "Implement OAuth authentication"
-```
-
----
-
-Done! Now you have **3 powerful ways** to organize your tasks in Obsidian and Claude can filter exactly what you need. 
-
-## License
-
-MIT - Use freely! If you make improvements, consider submitting a pull request 
+Open an [issue](https://github.com/apaulineoliveira/obsidian-mcp/issues) with: what you did, what you expected, what happened, your OS/Python version, and any error output.
 
 ## Contributing
 
-Found a bug or have an idea? Open an [issue](https://github.com/your-user/obsidian-mcp/issues) or submit a [pull request](https://github.com/your-user/obsidian-mcp/pulls)!
+1. Fork the repo and create a branch (`git checkout -b feature/my-change`)
+2. Make your change and test it locally
+3. Commit using [Conventional Commits](https://www.conventionalcommits.org) (e.g. `feat(filtering): ...`)
+4. Open a pull request describing what and why
 
----
+## License
 
-**Created by Pauline Oliveira**
-
-Questions? Open an issue on GitHub or reach out!
+MIT — created by Pauline Oliveira.
