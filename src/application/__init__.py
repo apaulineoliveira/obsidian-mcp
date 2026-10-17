@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from core.frontmatter import FrontmatterParser
+from core.frontmatter import Frontmatter
 from core.ports import FrontmatterCodec, NoteRepository
 
 from .notes import NoteService
@@ -16,9 +16,9 @@ class Services:
 
 
 def build_services(repository: NoteRepository, codec: FrontmatterCodec) -> Services:
-    parser = FrontmatterParser(codec)
+    frontmatter = Frontmatter(codec)
     return Services(
-        notes=NoteService(repository, parser),
-        todos=TodoService(repository, parser),
-        search=SearchService(repository, parser),
+        notes=NoteService(repository, frontmatter),
+        todos=TodoService(repository, frontmatter),
+        search=SearchService(repository, frontmatter),
     )

@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from adapters.filesystem import FileSystemVault
 from adapters.mcp_server import VaultTools
-from adapters.yaml_codec import RuamelFrontmatterCodec
+from adapters.yaml_codec import RuamelYamlCodec
 from application import build_services
 
 
@@ -30,4 +30,4 @@ def write(vault_dir):
 
 @pytest.fixture
 def tools(vault_dir):
-    return VaultTools(build_services(FileSystemVault(vault_dir), RuamelFrontmatterCodec()))
+    return VaultTools(build_services(FileSystemVault(vault_dir), RuamelYamlCodec()))

@@ -1,4 +1,3 @@
-import datetime
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -10,71 +9,63 @@ DELIMITER = "---"
 
 
 @dataclass(frozen=True)
+class SplitNote:
+    yaml_text: Optional[str]
+    body: str
+    body_start_line: int
+
+
+@dataclass(frozen=True)
 class ParsedNote:
     metadata: dict
     body: str
-    line_offset: int
+    body_start_line: int
 
 
-def split_frontmatter(content: str) -> tuple[Optional[str], str, int]:
+def split_frontmatter(content: str) -> SplitNote:
     lines = content.splitlines(keepends=True)
-    if not lines or lines[0].rstrip("\r\n").rstrip() != DELIMITER:
-        return None, content, 0
+    if not lines or not _is_delimiter(lines[0]):
+        return SplitNote(None, content, 0)
 
-    for i in range(1, len(lines)):
-        if lines[i].rstrip("\r\n").rstrip() == DELIMITER:
-            return "".join(lines[1:i]), "".join(lines[i + 1:]), i + 1
+    for index in range(1, len(lines)):
+        if _is_delimiter(lines[index]):
+            yaml_text = "".join(lines[1:index])
+            body = "".join(lines[index + 1:])
+            return SplitNote(yaml_text, body, index + 1)
 
-    return None, content, 0
-
-
-def detect_newline(content: str) -> str:
-    return "\r\n" if content.split("\n", 1)[0].endswith("\r") else "\n"
+    return SplitNote(None, content, 0)
 
 
-def assemble(yaml_text: str, body: str, newline: str) -> str:
+def join_frontmatter(yaml_text: str, body: str, newline: str) -> str:
     if not yaml_text.strip():
         return body
-    if newline != "\n":
-        yaml_text = yaml_text.replace("\r\n", "\n").replace("\n", newline)
+
+    yaml_text = _use_newline(yaml_text, newline)
     if not yaml_text.endswith(newline):
         yaml_text += newline
     return f"{DELIMITER}{newline}{yaml_text}{DELIMITER}{newline}{body}"
 
 
-def to_jsonable(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(k): to_jsonable(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [to_jsonable(v) for v in value]
-    if isinstance(value, (datetime.date, datetime.datetime)):
-        return value.isoformat()
-    return value
+def newline_style(content: str) -> str:
+    first_line = content.split("\n", 1)[0]
+    return "\r\n" if first_line.endswith("\r") else "\n"
 
 
-class FrontmatterParser:
+class Frontmatter:
     def __init__(self, codec: FrontmatterCodec):
         self.codec = codec
 
     def parse(self, content: str) -> ParsedNote:
-        yaml_text, body, offset = split_frontmatter(content)
-        if yaml_text is None:
-            return ParsedNote({}, body, 0)
+        split = split_frontmatter(content)
+        metadata = self._load_metadata(split.yaml_text)
+        return ParsedNote(metadata, split.body, split.body_start_line)
 
-        data = self.codec.load(yaml_text)
-        if data is None:
-            data = {}
-        if not isinstance(data, dict):
-            raise FrontmatterError("O frontmatter precisa ser um mapeamento chave: valor")
-
-        return ParsedNote(data, body, offset)
-
-    def parse_lenient(self, content: str) -> ParsedNote:
+    def parse_ignoring_invalid_yaml(self, content: str) -> ParsedNote:
         try:
             return self.parse(content)
         except FrontmatterError:
-            _, body, offset = split_frontmatter(content)
-            return ParsedNote({}, body, offset)
+            split = split_frontmatter(content)
+            return ParsedNote({}, split.body, split.body_start_line)
 
     def update(
         self,
@@ -82,7 +73,26 @@ class FrontmatterParser:
         set_values: Optional[dict[str, Any]] = None,
         remove_keys: Optional[list[str]] = None,
     ) -> str:
-        self.parse(content)
-        yaml_text, body, _ = split_frontmatter(content)
-        new_yaml = self.codec.update(yaml_text or "", set_values or {}, remove_keys or [])
-        return assemble(new_yaml, body, detect_newline(content))
+        split = split_frontmatter(content)
+        self._load_metadata(split.yaml_text)
+        new_yaml = self.codec.update(split.yaml_text or "", set_values or {}, remove_keys or [])
+        return join_frontmatter(new_yaml, split.body, newline_style(content))
+
+    def _load_metadata(self, yaml_text: Optional[str]) -> dict:
+        if yaml_text is None:
+            return {}
+
+        metadata = self.codec.load(yaml_text)
+        if metadata is None:
+            return {}
+        if not isinstance(metadata, dict):
+            raise FrontmatterError("O frontmatter precisa ser um mapeamento chave: valor")
+        return metadata
+
+
+def _is_delimiter(line: str) -> bool:
+    return line.rstrip() == DELIMITER
+
+
+def _use_newline(text: str, newline: str) -> str:
+    return text.replace("\r\n", "\n").replace("\n", newline)

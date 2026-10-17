@@ -1,9 +1,10 @@
 import asyncio
+import datetime
 import json
 
 from adapters.filesystem import FileSystemVault
-from adapters.mcp_server import TOOL_NAMES, create_server
-from adapters.yaml_codec import RuamelFrontmatterCodec
+from adapters.mcp_server import TOOL_NAMES, create_server, json_compatible
+from adapters.yaml_codec import RuamelYamlCodec
 from application import build_services
 
 
@@ -22,25 +23,27 @@ def call(tool, *args, **kwargs):
     return json.loads(tool(*args, **kwargs))
 
 
-def test_server_registers_all_tools_with_parameters(vault_dir):
-    server = create_server(build_services(FileSystemVault(vault_dir), RuamelFrontmatterCodec()))
-    tools = {t.name: t for t in asyncio.run(server.list_tools())}
+def test_server_registers_every_tool(vault_dir):
+    server = create_server(build_services(FileSystemVault(vault_dir), RuamelYamlCodec()))
+    tools = {tool.name: tool for tool in asyncio.run(server.list_tools())}
+
+    def parameters(name):
+        return set(tools[name].input_schema["properties"])
 
     assert tuple(tools) == TOOL_NAMES
-    assert all(tools[name].description for name in TOOL_NAMES)
-    params = lambda name: set((getattr(tools[name], "input_schema", None) or tools[name].inputSchema)["properties"])
-    assert params("update_frontmatter") == {"note_path", "set_values", "remove_keys"}
-    assert params("update_todo") == {"note_path", "line_number", "completed"}
-    assert "self" not in params("search_notes")
+    assert all(tool.description for tool in tools.values())
+    assert parameters("update_frontmatter") == {"note_path", "set_values", "remove_keys"}
+    assert parameters("update_todo") == {"note_path", "line_number", "completed"}
+    assert "self" not in parameters("search_notes")
 
 
-def test_todos_round_trip(tools, write):
-    path = write("Projects/x.md", NOTE)
+def test_get_todos_response(tools, write):
+    write("Projects/x.md", NOTE)
 
-    data = call(tools.get_todos, tag="projeto", priority="high")
-    todo = data["todos"][0]
-    assert data["count"] == 1
-    assert todo == {
+    response = call(tools.get_todos, tag="projeto", priority="high")
+
+    assert response["count"] == 1
+    assert response["todos"][0] == {
         "file": "Projects/x.md",
         "line": 7,
         "completed": False,
@@ -51,33 +54,46 @@ def test_todos_round_trip(tools, write):
         "project": "oloroke",
     }
 
-    assert call(tools.update_todo, "Projects/x.md", todo["line"], True)["success"]
-    assert path.read_text().endswith("- [x] 🔴 tarefa #backend\n")
+
+def test_update_todo(tools, write):
+    note = write("Projects/x.md", NOTE)
+
+    assert call(tools.update_todo, "Projects/x.md", 7, True)["success"]
+    assert note.read_text().endswith("- [x] 🔴 tarefa #backend\n")
     assert call(tools.update_todo, "Projects/x.md", 6, True) == {"error": "A linha 6 não é um to-do (- [ ] / - [x])"}
 
 
 def test_frontmatter_tools(tools, write):
-    path = write("Projects/x.md", NOTE)
+    note = write("Projects/x.md", NOTE)
 
-    data = call(tools.get_frontmatter, "Projects/../Projects/x.md")
-    assert data == {"file": "Projects/x.md", "frontmatter": {
-        "projeto": "oloroke", "tags": ["projeto/api"], "criado": "2026-01-15"}}
+    assert call(tools.get_frontmatter, "Projects/../Projects/x.md") == {
+        "file": "Projects/x.md",
+        "frontmatter": {"projeto": "oloroke", "tags": ["projeto/api"], "criado": "2026-01-15"},
+    }
 
-    assert call(tools.update_frontmatter, "Projects/x.md", set_values={"status": "done"})["frontmatter"]["status"] == "done"
-    assert "# comentário do usuário" in path.read_text()
-    assert "error" in call(tools.update_frontmatter, "Projects/x.md")
+    updated = call(tools.update_frontmatter, "Projects/x.md", set_values={"status": "done"})
+    assert updated["frontmatter"]["status"] == "done"
+    assert "# comentário do usuário" in note.read_text()
 
 
-def test_search_and_listing_tools(tools, write):
+def test_search_notes_response(tools, write):
     write("Projects/x.md", NOTE)
     write("Diario/hoje.md", "Reunião sobre OAuth #backend\n")
 
-    data = call(tools.search_notes, query="oauth", max_results=1)
-    assert data["results"] == [{
-        "file": "Diario/hoje.md", "tags": ["backend"], "match_count": 1,
+    response = call(tools.search_notes, query="oauth", max_results=1)
+
+    assert response["results"] == [{
+        "file": "Diario/hoje.md",
+        "tags": ["backend"],
+        "match_count": 1,
         "matches": [{"line": 0, "text": "Reunião sobre OAuth #backend"}],
     }]
-    assert (data["count"], data["total_notes_matched"], data["truncated"]) == (1, 2, True)
+    assert (response["count"], response["total_notes_matched"], response["truncated"]) == (1, 2, True)
+
+
+def test_listing_tools(tools, write):
+    write("Projects/x.md", NOTE)
+    write("Diario/hoje.md", "Reunião sobre OAuth #backend\n")
 
     assert call(tools.list_tags)["tags"][0] == {"tag": "backend", "notes": 2}
     assert call(tools.list_projects) == {"projects": ["oloroke"], "count": 1}
@@ -85,19 +101,25 @@ def test_search_and_listing_tools(tools, write):
     assert tools.get_note_content("Diario/hoje.md") == "Reunião sobre OAuth #backend\n"
 
 
-def test_every_tool_turns_domain_errors_into_json(tools, write, vault_dir):
+def test_every_tool_returns_domain_errors_as_json(tools, write, vault_dir):
     write("secret.md", "- [ ] segredo", root=vault_dir.parent)
 
-    for result in (
+    responses = [
         tools.get_note_content("../secret.md"),
         tools.update_todo("../secret.md", 0, True),
         tools.get_todos(folder=".."),
         tools.get_frontmatter("/etc/passwd"),
         tools.update_frontmatter("../secret.md", set_values={"a": 1}),
+        tools.update_frontmatter("secret.md"),
         tools.search_notes(query="x", folder="../"),
         tools.search_notes(),
         tools.list_tags(folder="nada"),
-    ):
-        assert set(json.loads(result)) == {"error"}
+    ]
 
+    assert all(set(json.loads(response)) == {"error"} for response in responses)
     assert (vault_dir.parent / "secret.md").read_text() == "- [ ] segredo"
+
+
+def test_json_compatible_converts_dates_and_collections():
+    value = {"data": datetime.date(2026, 1, 15), "itens": ({1},)}
+    assert json_compatible(value) == {"data": "2026-01-15", "itens": [[1]]}

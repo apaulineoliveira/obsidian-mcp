@@ -1,5 +1,5 @@
-from core.i18n import LANGUAGE_NAMES, get_supported_languages
+from core.priorities import LANGUAGE_NAMES, supported_languages
 
 
-def supported_languages() -> dict[str, str]:
-    return {code: LANGUAGE_NAMES.get(code, code) for code in get_supported_languages()}
+def supported_language_names() -> dict[str, str]:
+    return {code: LANGUAGE_NAMES.get(code, code) for code in supported_languages()}

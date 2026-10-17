@@ -2,28 +2,29 @@ from dataclasses import dataclass
 from typing import Iterator, Optional
 
 from core.errors import NoteReadError
-from core.frontmatter import FrontmatterParser
+from core.frontmatter import Frontmatter
 from core.ports import NoteRepository
 
 
 @dataclass(frozen=True)
-class Document:
+class VaultNote:
     path: str
     content: str
     metadata: dict
     body: str
-    line_offset: int
+    body_start_line: int
 
 
-def load_documents(
+def read_vault_notes(
     repository: NoteRepository,
-    parser: FrontmatterParser,
+    frontmatter: Frontmatter,
     folder: Optional[str] = None,
-) -> Iterator[Document]:
+) -> Iterator[VaultNote]:
     for path in repository.list_notes(folder):
         try:
             content = repository.read(path)
         except NoteReadError:
             continue
-        note = parser.parse_lenient(content)
-        yield Document(path, content, note.metadata, note.body, note.line_offset)
+
+        parsed = frontmatter.parse_ignoring_invalid_yaml(content)
+        yield VaultNote(path, content, parsed.metadata, parsed.body, parsed.body_start_line)

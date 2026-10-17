@@ -5,10 +5,10 @@ from typing import Any, Optional
 from .errors import SearchError
 
 
-MAX_PATTERN_LENGTH = 500
-MAX_SNIPPET_LENGTH = 240
+MAX_QUERY_LENGTH = 500
+MAX_EXCERPT_LENGTH = 240
 MAX_RESULTS_LIMIT = 200
-MAX_MATCHES_LIMIT = 100
+MAX_MATCHES_PER_NOTE_LIMIT = 100
 
 
 @dataclass(frozen=True)
@@ -36,98 +36,89 @@ class SearchQuery:
     max_results: int = 50
     max_matches_per_note: int = 20
 
-    def validate(self) -> "SearchQuery":
+    def validate(self) -> None:
         if not self.query and not self.tags and not self.frontmatter:
             raise SearchError("Informe 'query', 'tags' e/ou 'frontmatter'")
-        return self
 
     @property
-    def result_limit(self) -> int:
+    def results_limit(self) -> int:
         return clamp(self.max_results, 1, MAX_RESULTS_LIMIT)
 
     @property
-    def match_limit(self) -> int:
-        return clamp(self.max_matches_per_note, 1, MAX_MATCHES_LIMIT)
-
-    def pattern(self) -> Optional[re.Pattern]:
-        if not self.query:
-            return None
-        return compile_query(self.query, self.regex, self.case_sensitive)
+    def matches_per_note_limit(self) -> int:
+        return clamp(self.max_matches_per_note, 1, MAX_MATCHES_PER_NOTE_LIMIT)
 
 
 @dataclass(frozen=True)
 class SearchResult:
-    results: list[NoteMatch]
-    total: int
+    notes: list[NoteMatch]
+    total_notes_matched: int
 
     @property
     def truncated(self) -> bool:
-        return self.total > len(self.results)
+        return self.total_notes_matched > len(self.notes)
 
 
-def clamp(value: int, low: int, high: int) -> int:
-    return min(max(value, low), high)
+def clamp(value: int, minimum: int, maximum: int) -> int:
+    return min(max(value, minimum), maximum)
 
 
-def compile_query(query: str, regex: bool = False, case_sensitive: bool = False) -> re.Pattern:
-    if len(query) > MAX_PATTERN_LENGTH:
-        raise SearchError(f"Consulta muito longa (máx. {MAX_PATTERN_LENGTH} caracteres)")
+def compile_search_pattern(query: str, regex: bool = False, case_sensitive: bool = False) -> re.Pattern:
+    if len(query) > MAX_QUERY_LENGTH:
+        raise SearchError(f"Consulta muito longa (máx. {MAX_QUERY_LENGTH} caracteres)")
 
     flags = 0 if case_sensitive else re.IGNORECASE
+    source = query if regex else re.escape(query)
     try:
-        return re.compile(query if regex else re.escape(query), flags)
-    except re.error as e:
-        raise SearchError(f"Regex inválida: {e}") from e
+        return re.compile(source, flags)
+    except re.error as error:
+        raise SearchError(f"Regex inválida: {error}") from error
 
 
-def find_matches(content: str, pattern: re.Pattern, limit: int) -> tuple[list[LineMatch], int]:
+def find_matching_lines(content: str, pattern: re.Pattern) -> list[LineMatch]:
     matches = []
-    total = 0
-
-    for i, line in enumerate(content.splitlines()):
+    for line_number, line in enumerate(content.splitlines()):
         match = pattern.search(line)
-        if not match:
-            continue
-        total += 1
-        if len(matches) < limit:
-            matches.append(LineMatch(i, snippet(line, match.start(), match.end())))
-
-    return matches, total
+        if match:
+            matches.append(LineMatch(line_number, excerpt_around(line, match.start(), match.end())))
+    return matches
 
 
-def snippet(line: str, start: int, end: int) -> str:
-    if len(line) <= MAX_SNIPPET_LENGTH:
+def excerpt_around(line: str, match_start: int, match_end: int) -> str:
+    if len(line) <= MAX_EXCERPT_LENGTH:
         return line.strip()
 
-    padding = max(0, (MAX_SNIPPET_LENGTH - (end - start)) // 2)
-    left = max(0, start - padding)
-    right = min(len(line), left + MAX_SNIPPET_LENGTH)
-    left = max(0, right - MAX_SNIPPET_LENGTH)
-    return ("…" if left else "") + line[left:right].strip() + ("…" if right < len(line) else "")
+    context = (MAX_EXCERPT_LENGTH - (match_end - match_start)) // 2
+    window_start = max(0, min(match_start - context, len(line) - MAX_EXCERPT_LENGTH))
+    window_end = window_start + MAX_EXCERPT_LENGTH
+
+    prefix = "…" if window_start > 0 else ""
+    suffix = "…" if window_end < len(line) else ""
+    return prefix + line[window_start:window_end].strip() + suffix
 
 
-def matches_frontmatter(metadata: dict, filters: Optional[dict[str, Any]]) -> bool:
+def metadata_matches(metadata: dict, filters: Optional[dict[str, Any]]) -> bool:
     for key, expected in (filters or {}).items():
         if key not in metadata:
             return False
 
-        actual = metadata[key]
-        actual_values = actual if isinstance(actual, (list, tuple, set)) else [actual]
-        expected_values = expected if isinstance(expected, (list, tuple, set)) else [expected]
-
-        actual_norm = {_normalize_value(v) for v in actual_values}
-        if not all(_normalize_value(v) in actual_norm for v in expected_values):
+        available = {_comparable(value) for value in _as_list(metadata[key])}
+        if not all(_comparable(value) in available for value in _as_list(expected)):
             return False
 
     return True
 
 
-def rank(matches: list[NoteMatch], limit: int) -> SearchResult:
-    ordered = sorted(matches, key=lambda m: (-m.match_count, m.file))
-    return SearchResult(results=ordered[:limit], total=len(ordered))
+def rank_by_relevance(notes: list[NoteMatch], limit: int) -> SearchResult:
+    ranked = sorted(notes, key=lambda note: (-note.match_count, note.file))
+    return SearchResult(notes=ranked[:limit], total_notes_matched=len(ranked))
 
 
-def _normalize_value(value: Any) -> str:
+def _as_list(value: Any) -> list:
+    return list(value) if isinstance(value, (list, tuple, set)) else [value]
+
+
+def _comparable(value: Any) -> str:
     if isinstance(value, bool):
         return str(value).lower()
     if hasattr(value, "isoformat"):

@@ -1,75 +1,79 @@
 import re
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 
-INLINE_TAG_RE = re.compile(r"(?<![\w#/&])#([\w/-]+)")
-INLINE_CODE_RE = re.compile(r"`[^`]*`")
-FENCE_RE = re.compile(r"^\s*(```|~~~)")
+INLINE_TAG_PATTERN = re.compile(r"(?<![\w#/&])#([\w/-]+)")
+INLINE_CODE_PATTERN = re.compile(r"`[^`]*`")
+CODE_FENCE_PATTERN = re.compile(r"^\s*(```|~~~)")
 
 
-def extract_inline_tags(text: str) -> list[str]:
+def inline_tags(text: str) -> list[str]:
     tags = []
-    in_fence = False
-
-    for line in text.splitlines():
-        if FENCE_RE.match(line):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-        for tag in INLINE_TAG_RE.findall(INLINE_CODE_RE.sub("", line)):
-            tag = tag.strip("/")
-            if tag and not tag.replace("/", "").isdigit():
+    for line in _lines_outside_code_blocks(text):
+        line_without_code = INLINE_CODE_PATTERN.sub("", line)
+        for raw_tag in INLINE_TAG_PATTERN.findall(line_without_code):
+            tag = raw_tag.strip("/")
+            if _is_valid_tag(tag):
                 tags.append(tag)
-
     return tags
 
 
-def strip_inline_tags(text: str) -> str:
-    return INLINE_TAG_RE.sub("", text)
+def remove_inline_tags(text: str) -> str:
+    return INLINE_TAG_PATTERN.sub("", text)
 
 
-def normalize_tags(value: Any) -> list[str]:
+def parse_tag_field(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
-        items = re.split(r"[,\s]+", value)
+        candidates = re.split(r"[,\s]+", value)
     elif isinstance(value, (list, tuple, set)):
-        items = [str(v) for v in value if v is not None]
+        candidates = [str(item) for item in value if item is not None]
     else:
-        items = [str(value)]
+        candidates = [str(value)]
 
-    return [item.strip().lstrip("#") for item in items if item.strip().lstrip("#")]
-
-
-def unique_tags(tags: Iterable[str]) -> list[str]:
-    seen = {}
-    for tag in tags:
-        seen.setdefault(tag.lower(), None)
-    return list(seen)
+    tags = (candidate.strip().lstrip("#") for candidate in candidates)
+    return [tag for tag in tags if tag]
 
 
 def frontmatter_tags(metadata: dict) -> list[str]:
-    return normalize_tags(metadata.get("tags")) + normalize_tags(metadata.get("tag"))
+    return parse_tag_field(metadata.get("tags")) + parse_tag_field(metadata.get("tag"))
 
 
 def note_tags(metadata: dict, body: str) -> list[str]:
-    return unique_tags(frontmatter_tags(metadata) + extract_inline_tags(body))
+    return unique_lowercase(frontmatter_tags(metadata) + inline_tags(body))
 
 
-def tag_matches(wanted: str, tag: str) -> bool:
-    wanted = wanted.lower().lstrip("#").rstrip("/")
+def unique_lowercase(tags: Iterable[str]) -> list[str]:
+    return list(dict.fromkeys(tag.lower() for tag in tags))
+
+
+def tag_matches(tag: str, wanted: str) -> bool:
     tag = tag.lower()
+    wanted = wanted.lower().lstrip("#").rstrip("/")
     return tag == wanted or tag.startswith(wanted + "/")
 
 
-def has_all_tags(tags: list[str], wanted: list[str]) -> bool:
-    return all(any(tag_matches(w, t) for t in tags) for w in wanted)
+def has_all_tags(tags: list[str], wanted_tags: list[str]) -> bool:
+    return all(any(tag_matches(tag, wanted) for tag in tags) for wanted in wanted_tags)
 
 
-def count_tags(tag_lists: Iterable[list[str]]) -> list[tuple[str, int]]:
+def count_notes_per_tag(tags_per_note: Iterable[list[str]]) -> list[tuple[str, int]]:
     counts: dict[str, int] = {}
-    for tags in tag_lists:
+    for tags in tags_per_note:
         for tag in tags:
             counts[tag] = counts.get(tag, 0) + 1
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def _lines_outside_code_blocks(text: str) -> Iterator[str]:
+    inside_code_block = False
+    for line in text.splitlines():
+        if CODE_FENCE_PATTERN.match(line):
+            inside_code_block = not inside_code_block
+        elif not inside_code_block:
+            yield line
+
+
+def _is_valid_tag(tag: str) -> bool:
+    return bool(tag) and not tag.replace("/", "").isdigit()

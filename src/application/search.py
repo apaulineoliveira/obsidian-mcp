@@ -1,35 +1,57 @@
-from core.frontmatter import FrontmatterParser
+import re
+from typing import Optional
+
+from core.frontmatter import Frontmatter
 from core.ports import NoteRepository
-from core.search import NoteMatch, SearchQuery, SearchResult, find_matches, matches_frontmatter, rank
+from core.search import (
+    NoteMatch,
+    SearchQuery,
+    SearchResult,
+    compile_search_pattern,
+    find_matching_lines,
+    metadata_matches,
+    rank_by_relevance,
+)
 from core.tags import has_all_tags, note_tags
 
-from .documents import load_documents
+from .vault_notes import VaultNote, read_vault_notes
 
 
 class SearchService:
-    def __init__(self, repository: NoteRepository, parser: FrontmatterParser):
+    def __init__(self, repository: NoteRepository, frontmatter: Frontmatter):
         self.repository = repository
-        self.parser = parser
+        self.frontmatter = frontmatter
 
     def search(self, query: SearchQuery) -> SearchResult:
         query.validate()
-        pattern = query.pattern()
-        found = []
+        pattern = _compile_pattern(query)
 
-        for doc in load_documents(self.repository, self.parser, query.folder):
-            if not matches_frontmatter(doc.metadata, query.frontmatter):
-                continue
+        matches = []
+        for note in read_vault_notes(self.repository, self.frontmatter, query.folder):
+            match = self._match_note(note, query, pattern)
+            if match:
+                matches.append(match)
 
-            tags = note_tags(doc.metadata, doc.body)
-            if query.tags and not has_all_tags(tags, query.tags):
-                continue
+        return rank_by_relevance(matches, query.results_limit)
 
-            matches, match_count = [], 0
-            if pattern:
-                matches, match_count = find_matches(doc.content, pattern, query.match_limit)
-                if not match_count:
-                    continue
+    def _match_note(self, note: VaultNote, query: SearchQuery, pattern: Optional[re.Pattern]) -> Optional[NoteMatch]:
+        if not metadata_matches(note.metadata, query.frontmatter):
+            return None
 
-            found.append(NoteMatch(doc.path, tags, match_count, matches))
+        tags = note_tags(note.metadata, note.body)
+        if query.tags and not has_all_tags(tags, query.tags):
+            return None
 
-        return rank(found, query.result_limit)
+        if pattern is None:
+            return NoteMatch(note.path, tags)
+
+        matching_lines = find_matching_lines(note.content, pattern)
+        if not matching_lines:
+            return None
+        return NoteMatch(note.path, tags, len(matching_lines), matching_lines[:query.matches_per_note_limit])
+
+
+def _compile_pattern(query: SearchQuery) -> Optional[re.Pattern]:
+    if not query.query:
+        return None
+    return compile_search_pattern(query.query, query.regex, query.case_sensitive)

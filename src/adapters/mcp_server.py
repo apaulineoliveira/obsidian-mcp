@@ -1,3 +1,4 @@
+import datetime
 import functools
 import json
 from dataclasses import asdict
@@ -6,10 +7,10 @@ from typing import Any, Callable, Optional
 from mcp.server.mcpserver import MCPServer
 
 from application import Services
-from application.languages import supported_languages
+from application.languages import supported_language_names
 from core.errors import DomainError
-from core.frontmatter import to_jsonable
-from core.paths import normalize_note_path
+from core.paths import safe_note_path
+from core.priorities import DEFAULT_LANGUAGE
 from core.search import SearchQuery
 from core.todos import TodoFilter
 
@@ -37,28 +38,42 @@ def error_response(message: str) -> str:
     return to_json({"error": message}, indent=None)
 
 
-def handles_domain_errors(method: Callable[..., str]) -> Callable[..., str]:
-    @functools.wraps(method)
-    def wrapper(*args, **kwargs) -> str:
+def json_compatible(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): json_compatible(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [json_compatible(item) for item in value]
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.isoformat()
+    return value
+
+
+def display_path(note_path: str) -> str:
+    return safe_note_path(note_path).as_posix()
+
+
+def returns_errors_as_json(tool: Callable[..., str]) -> Callable[..., str]:
+    @functools.wraps(tool)
+    def run_tool(*args, **kwargs) -> str:
         try:
-            return method(*args, **kwargs)
-        except DomainError as e:
-            return error_response(str(e))
-    return wrapper
+            return tool(*args, **kwargs)
+        except DomainError as error:
+            return error_response(str(error))
+    return run_tool
 
 
 class VaultTools:
     def __init__(self, services: Services):
         self.services = services
 
-    @handles_domain_errors
+    @returns_errors_as_json
     def get_todos(
         self,
         folder: Optional[str] = None,
         tag: Optional[str] = None,
         priority: Optional[str] = None,
         completed: Optional[bool] = None,
-        language: Optional[str] = 'en'
+        language: Optional[str] = DEFAULT_LANGUAGE
     ) -> str:
         """
         Extrai todos os to-dos com filtros avançados e suporte multilíngue.
@@ -78,7 +93,7 @@ class VaultTools:
         todos = self.services.todos.list_todos(
             folder,
             TodoFilter(tag=tag, priority=priority, completed=completed),
-            language or 'en',
+            language or DEFAULT_LANGUAGE,
         )
         return to_json({
             "todos": [todo.to_dict() for todo in todos],
@@ -92,12 +107,12 @@ class VaultTools:
             }
         })
 
-    @handles_domain_errors
+    @returns_errors_as_json
     def get_note_content(self, note_path: str) -> str:
         """Lê o conteúdo completo de uma nota do Obsidian"""
         return self.services.notes.get_content(note_path)
 
-    @handles_domain_errors
+    @returns_errors_as_json
     def update_todo(self, note_path: str, line_number: int, completed: bool) -> str:
         """
         Marca um to-do como completo ou incompleto em uma nota.
@@ -113,7 +128,7 @@ class VaultTools:
             "message": f"Tarefa marcada como {'completa' if completed else 'incompleta'}"
         }, indent=None)
 
-    @handles_domain_errors
+    @returns_errors_as_json
     def get_frontmatter(self, note_path: str) -> str:
         """
         Lê os metadados YAML (frontmatter) de uma nota.
@@ -122,9 +137,9 @@ class VaultTools:
         - note_path: Caminho da nota relativo ao vault (ex: "Projects/oloroke.md")
         """
         metadata = self.services.notes.get_frontmatter(note_path)
-        return to_json({"file": normalize_note_path(note_path).as_posix(), "frontmatter": to_jsonable(metadata)})
+        return to_json({"file": display_path(note_path), "frontmatter": json_compatible(metadata)})
 
-    @handles_domain_errors
+    @returns_errors_as_json
     def update_frontmatter(
         self,
         note_path: str,
@@ -145,11 +160,11 @@ class VaultTools:
         metadata = self.services.notes.update_frontmatter(note_path, set_values, remove_keys)
         return to_json({
             "success": True,
-            "file": normalize_note_path(note_path).as_posix(),
-            "frontmatter": to_jsonable(metadata)
+            "file": display_path(note_path),
+            "frontmatter": json_compatible(metadata)
         })
 
-    @handles_domain_errors
+    @returns_errors_as_json
     def search_notes(
         self,
         query: Optional[str] = None,
@@ -189,9 +204,9 @@ class VaultTools:
             max_matches_per_note=max_matches_per_note,
         ))
         return to_json({
-            "results": [asdict(match) for match in result.results],
-            "count": len(result.results),
-            "total_notes_matched": result.total,
+            "results": [asdict(note) for note in result.notes],
+            "count": len(result.notes),
+            "total_notes_matched": result.total_notes_matched,
             "truncated": result.truncated,
             "filters": {
                 "query": query,
@@ -203,7 +218,7 @@ class VaultTools:
             }
         })
 
-    @handles_domain_errors
+    @returns_errors_as_json
     def list_tags(self, folder: Optional[str] = None) -> str:
         """
         Lista todas as tags do vault (inline e frontmatter) com o número de
@@ -218,13 +233,13 @@ class VaultTools:
             "count": len(tags)
         })
 
-    @handles_domain_errors
+    @returns_errors_as_json
     def list_projects(self) -> str:
         """Lista todos os projetos encontrados nas notas (via frontmatter)"""
         projects = self.services.notes.list_projects()
         return to_json({"projects": projects, "count": len(projects)})
 
-    @handles_domain_errors
+    @returns_errors_as_json
     def get_supported_languages(self) -> str:
         """
         Lista todos os idiomas suportados para filtros de prioridade.
@@ -232,11 +247,11 @@ class VaultTools:
         Retorna:
             JSON com lista de códigos de idioma
         """
-        languages = supported_languages()
+        names_by_code = supported_language_names()
         return to_json({
-            "languages": list(languages),
-            "count": len(languages),
-            "details": languages
+            "languages": list(names_by_code),
+            "count": len(names_by_code),
+            "details": names_by_code
         })
 
 

@@ -1,7 +1,7 @@
 import pytest
 
 from core.errors import TodoError
-from core.todos import TodoFilter, parse_todos, set_checkbox
+from core.todos import TodoFilter, note_defaults, parse_todos, set_todo_completed
 
 
 BODY = """# Título
@@ -11,36 +11,49 @@ Texto com [ ] solto
 + [ ] Herdada
 """
 
+METADATA = {"projeto": "oloroke", "prioridade": "baixa", "tags": ["web"]}
+
 
 @pytest.fixture
 def todos():
-    return parse_todos("x.md", {"projeto": "oloroke", "prioridade": "baixa", "tags": ["web"]}, BODY, 4, "pt")
+    return parse_todos("x.md", BODY, body_start_line=4, defaults=note_defaults(METADATA, "pt"))
 
 
-def test_parse_todos_extracts_fields(todos):
-    assert [(t.line, t.completed, t.text) for t in todos] == [
+def test_parse_todos_reads_checkbox_lines(todos):
+    assert [(todo.line, todo.completed, todo.text) for todo in todos] == [
         (5, False, "- [ ] Deploy"),
         (6, True, "* [x] Revisar PR"),
         (8, False, "+ [ ] Herdada"),
     ]
-    assert todos[0].tags == ["web", "projeto/api"]
-    assert todos[0].priority == "high"
-    assert todos[2].priority == "low"
-    assert todos[0].project == "oloroke"
+
+
+def test_todos_inherit_note_metadata(todos):
+    deploy, _, inherited = todos
+    assert deploy.tags == ["web", "projeto/api"]
+    assert deploy.priority == "high"
+    assert inherited.priority == "low"
+    assert deploy.project == "oloroke"
 
 
 def test_todo_filter(todos):
-    pick = lambda **kw: [t.line for t in todos if TodoFilter(**kw).accepts(t)]
-    assert pick(tag="projeto") == [5]
-    assert pick(tag="web") == [5, 6, 8]
-    assert pick(priority="low") == [6, 8]
-    assert pick(completed=True) == [6]
+    def lines_matching(**criteria):
+        todo_filter = TodoFilter(**criteria)
+        return [todo.line for todo in todos if todo_filter.matches(todo)]
+
+    assert lines_matching(tag="projeto") == [5]
+    assert lines_matching(tag="web") == [5, 6, 8]
+    assert lines_matching(priority="low") == [6, 8]
+    assert lines_matching(completed=True) == [6]
 
 
-def test_set_checkbox_only_touches_checkbox_lines():
+def test_set_todo_completed_only_changes_the_checkbox():
     content = "Texto com [ ] solto\r\n  * [ ] tarefa [ ] fim\r\n"
-    assert set_checkbox(content, 1, True) == "Texto com [ ] solto\r\n  * [x] tarefa [ ] fim\r\n"
+    assert set_todo_completed(content, 1, True) == "Texto com [ ] solto\r\n  * [x] tarefa [ ] fim\r\n"
+    assert set_todo_completed("- [X] feito\n", 0, False) == "- [ ] feito\n"
+
+
+def test_set_todo_completed_rejects_invalid_lines():
     with pytest.raises(TodoError):
-        set_checkbox(content, 0, True)
+        set_todo_completed("Texto com [ ] solto\n", 0, True)
     with pytest.raises(TodoError):
-        set_checkbox(content, 5, True)
+        set_todo_completed("- [ ] a\n", 5, True)
