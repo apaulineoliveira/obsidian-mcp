@@ -4,7 +4,8 @@ Obsidian MCP Server with Advanced Filtering and Multilingual Support
 Features:
 - Tags inline (#urgente, #backend)
 - Priority with emoji (🔴🟡🟢)
-- YAML frontmatter metadata
+- YAML frontmatter metadata (read and update)
+- Path traversal protection for every vault access
 - Multilingual support (PT, EN, ES, FR, DE, IT)
 """
 
@@ -12,21 +13,22 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from mcp.server.mcpserver import MCPServer
-
-try:
-    import yaml
-except ImportError:
-    yaml = None
-
 
 from i18n import (
     normalize_priority, 
     extract_priority_emoji,
     get_supported_languages
+)
+from frontmatter import (
+    FrontmatterError,
+    extract_frontmatter,
+    parse_frontmatter,
+    to_jsonable,
+    update_frontmatter as apply_frontmatter_update,
 )
 from vault import Vault, VaultPathError
 
@@ -46,49 +48,6 @@ def error_response(message: str) -> str:
 def extract_tags(text: str) -> list[str]:
     """Extrai tags de uma linha: #urgente #backend -> ['urgente', 'backend']"""
     return re.findall(r'#(\w+)', text)
-
-
-def extract_frontmatter(content: str) -> tuple[dict, str]:
-    """
-    Extrai YAML frontmatter do topo do arquivo.
-    Retorna (metadata_dict, content_sem_frontmatter)
-    
-    Exemplo:
-    ---
-    projeto: oloroke
-    prioridade: alta
-    tags: [urgente, backend]
-    ---
-    
-    Resto do conteúdo...
-    """
-    if not content.startswith('---'):
-        return {}, content
-    
-    try:
-        lines = content.split('\n')
-        end_idx = None
-        
-        for i in range(1, len(lines)):
-            if lines[i].strip() == '---':
-                end_idx = i
-                break
-        
-        if end_idx is None:
-            return {}, content
-        
-        frontmatter_text = '\n'.join(lines[1:end_idx])
-        body_text = '\n'.join(lines[end_idx + 1:])
-        
-        if yaml:
-            metadata = yaml.safe_load(frontmatter_text) or {}
-        else:
-            metadata = {}
-        
-        return metadata, body_text
-    
-    except Exception:
-        return {}, content
 
 
 def matches_filter(todo: dict, tag: Optional[str], priority: Optional[str]) -> bool:
@@ -147,7 +106,7 @@ def get_todos(
             content = vault.read_text(md_file)
             
             
-            file_metadata, body_content = extract_frontmatter(content)
+            file_metadata, body_content, line_offset = extract_frontmatter(content)
             
            
             frontmatter_tags = file_metadata.get('tags', [])
@@ -156,7 +115,10 @@ def get_todos(
             
            
             frontmatter_priority_raw = file_metadata.get('prioridade') or file_metadata.get('priority')
-            frontmatter_priority = normalize_priority(frontmatter_priority_raw, language=language)
+            frontmatter_priority = normalize_priority(
+                str(frontmatter_priority_raw) if frontmatter_priority_raw is not None else None,
+                language=language
+            )
             
             lines = body_content.split('\n')
             
@@ -186,7 +148,7 @@ def get_todos(
                     
                     todo = {
                         "file": str(relative_path),
-                        "line": i,
+                        "line": line_offset + i,
                         "completed": is_completed,
                         "text": clean_text,
                         "raw_text": line.strip(),
@@ -262,6 +224,64 @@ def update_todo(note_path: str, line_number: int, completed: bool) -> str:
 
 
 @mcp.tool()
+def get_frontmatter(note_path: str) -> str:
+    """
+    Lê os metadados YAML (frontmatter) de uma nota.
+
+    Parâmetros:
+    - note_path: Caminho da nota relativo ao vault (ex: "Projects/oloroke.md")
+    """
+    try:
+        full_path = vault.resolve_note(note_path)
+        metadata, _, _ = parse_frontmatter(vault.read_text(full_path))
+    except (VaultPathError, FrontmatterError) as e:
+        return error_response(str(e))
+
+    return json.dumps({
+        "file": vault.relative(full_path),
+        "frontmatter": to_jsonable(metadata)
+    }, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+def update_frontmatter(
+    note_path: str,
+    set_values: Optional[dict[str, Any]] = None,
+    remove_keys: Optional[list[str]] = None
+) -> str:
+    """
+    Cria, altera ou remove chaves do frontmatter YAML de uma nota,
+    preservando comentários, ordem das chaves e o corpo da nota.
+
+    Parâmetros:
+    - note_path: Caminho da nota relativo ao vault (ex: "Projects/oloroke.md")
+    - set_values: Chaves a criar/sobrescrever (ex: {"status": "done", "tags": ["a", "b"]})
+    - remove_keys: Chaves a remover (ex: ["draft"])
+
+    Se a nota não tiver frontmatter, um bloco é criado no topo.
+    """
+    if not set_values and not remove_keys:
+        return error_response("Informe 'set_values' e/ou 'remove_keys'")
+
+    try:
+        full_path = vault.resolve_note(note_path)
+        content = vault.read_text(full_path)
+        new_content = apply_frontmatter_update(content, set_values, remove_keys)
+        metadata, _, _ = parse_frontmatter(new_content)
+    except (VaultPathError, FrontmatterError) as e:
+        return error_response(str(e))
+
+    if new_content != content:
+        vault.write_text(full_path, new_content)
+
+    return json.dumps({
+        "success": True,
+        "file": vault.relative(full_path),
+        "frontmatter": to_jsonable(metadata)
+    }, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
 def list_projects() -> str:
     """Lista todos os projetos encontrados nas notas (via frontmatter)"""
     projects = set()
@@ -275,7 +295,7 @@ def list_projects() -> str:
         try:
             content = vault.read_text(md_file)
             
-            metadata, _ = extract_frontmatter(content)
+            metadata, _, _ = extract_frontmatter(content)
             project = metadata.get('projeto') or metadata.get('project')
             
             if project:
