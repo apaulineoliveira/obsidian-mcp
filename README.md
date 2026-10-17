@@ -41,7 +41,7 @@ tags: [backend]
 - [ ] 🔴 Implement OAuth #urgent
 ```
 
-Priority keywords work in **pt, en, es, fr, de, it**. To add another language, see [src/examples/add_custom_language.py](src/examples/add_custom_language.py).
+Priority keywords work in **pt, en, es, fr, de, it**. To add another language, add its keywords to `PRIORITY_KEYWORDS` in [src/core/priorities.py](src/core/priorities.py); [src/examples/add_custom_language.py](src/examples/add_custom_language.py) shows ready-made keywords for ja, zh, ru, el and ko.
 
 ### Safety
 
@@ -142,13 +142,15 @@ src/
 │   ├── tags.py          Obsidian tag rules (nested, case-insensitive, code blocks)
 │   ├── search.py        Query, matching, snippets and ranking
 │   ├── todos.py         Checkbox parsing, filters and toggling
-│   ├── i18n.py          Priority keywords per language
+│   ├── priorities.py    Priority keywords per language and emoji
 │   ├── ports.py         NoteRepository and FrontmatterCodec interfaces
 │   └── errors.py        Domain errors
 ├── application/         Use cases that orchestrate the core through the ports
+│   ├── vault_notes.py   Reads every note once, already split into metadata and body
 │   ├── notes.py         Content, frontmatter, tags and projects
 │   ├── todos.py         List and complete to-dos
-│   └── search.py        Note search
+│   ├── search.py        Note search
+│   └── languages.py     Supported languages
 └── adapters/            The outside world
     ├── filesystem.py    NoteRepository on disk (symlinks, atomic writes)
     ├── yaml_codec.py    FrontmatterCodec with ruamel.yaml (round-trip)

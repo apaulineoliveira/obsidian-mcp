@@ -41,7 +41,7 @@ tags: [backend]
 - [ ] 🔴 Implementar OAuth #urgente
 ```
 
-As palavras de prioridade funcionam em **pt, en, es, fr, de, it**. Para adicionar outro idioma, veja [src/examples/add_custom_language.py](src/examples/add_custom_language.py).
+As palavras de prioridade funcionam em **pt, en, es, fr, de, it**. Para adicionar outro idioma, inclua as palavras em `PRIORITY_KEYWORDS` no arquivo [src/core/priorities.py](src/core/priorities.py); o [src/examples/add_custom_language.py](src/examples/add_custom_language.py) traz palavras prontas para ja, zh, ru, el e ko.
 
 ### Segurança
 
@@ -142,13 +142,15 @@ src/
 │   ├── tags.py          Regras de tags do Obsidian (aninhadas, sem caixa, blocos de código)
 │   ├── search.py        Consulta, correspondência, trechos e ranking
 │   ├── todos.py         Leitura de checkboxes, filtros e marcação
-│   ├── i18n.py          Palavras de prioridade por idioma
+│   ├── priorities.py    Palavras de prioridade por idioma e emoji
 │   ├── ports.py         Interfaces NoteRepository e FrontmatterCodec
 │   └── errors.py        Erros de domínio
 ├── application/         Casos de uso que orquestram o core pelas portas
+│   ├── vault_notes.py   Lê cada nota uma vez, já separada em metadados e corpo
 │   ├── notes.py         Conteúdo, frontmatter, tags e projetos
 │   ├── todos.py         Listar e concluir to-dos
-│   └── search.py        Busca de notas
+│   ├── search.py        Busca de notas
+│   └── languages.py     Idiomas suportados
 └── adapters/            O mundo externo
     ├── filesystem.py    NoteRepository em disco (symlinks, escrita atômica)
     ├── yaml_codec.py    FrontmatterCodec com ruamel.yaml (round-trip)
