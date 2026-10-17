@@ -2,7 +2,8 @@
 Obsidian MCP Server with Advanced Filtering and Multilingual Support
 
 Features:
-- Tags inline (#urgente, #backend)
+- Tags inline (#urgente, #backend, #projeto/api)
+- Text, regex, tag and frontmatter search
 - Priority with emoji (🔴🟡🟢)
 - YAML frontmatter metadata (read and update)
 - Path traversal protection for every vault access
@@ -30,6 +31,18 @@ from frontmatter import (
     to_jsonable,
     update_frontmatter as apply_frontmatter_update,
 )
+from search import (
+    INLINE_TAG_RE,
+    SearchError,
+    compile_query,
+    extract_inline_tags,
+    find_matches,
+    has_all_tags,
+    matches_frontmatter,
+    normalize_tags,
+    note_tags,
+    unique_tags,
+)
 from vault import Vault, VaultPathError
 
 # Variáveis do config do cliente MCP têm prioridade sobre o .env
@@ -45,18 +58,13 @@ CHECKBOX_RE = re.compile(r'^(\s*[-*+]\s+\[)([ xX])(\])')
 def error_response(message: str) -> str:
     return json.dumps({"error": message}, ensure_ascii=False)
 
-def extract_tags(text: str) -> list[str]:
-    """Extrai tags de uma linha: #urgente #backend -> ['urgente', 'backend']"""
-    return re.findall(r'#(\w+)', text)
-
 
 def matches_filter(todo: dict, tag: Optional[str], priority: Optional[str]) -> bool:
     """Verifica se um to-do passa nos filtros"""
     
    
     if tag:
-        todo_tags = todo.get('tags', [])
-        if tag.lower() not in [t.lower() for t in todo_tags]:
+        if not has_all_tags(todo.get('tags', []), [tag]):
             return False
     
     
@@ -82,7 +90,7 @@ def get_todos(
     
     Parâmetros:
     - folder: Pasta específica (ex: "Projects/oloroke")
-    - tag: Filtrar por tag (ex: "urgente", "backend")
+    - tag: Filtrar por tag (ex: "urgente", "backend"; "projeto" inclui "projeto/x")
     - priority: Filtrar por prioridade ("high", "medium", "low", "blocked")
     - completed: True/False para tarefas completas/incompletas
     - language: Idioma para interpretação ('pt', 'en', 'es', 'fr', 'de', 'it')
@@ -109,9 +117,9 @@ def get_todos(
             file_metadata, body_content, line_offset = extract_frontmatter(content)
             
            
-            frontmatter_tags = file_metadata.get('tags', [])
-            if isinstance(frontmatter_tags, str):
-                frontmatter_tags = [frontmatter_tags]
+            frontmatter_tags = (
+                normalize_tags(file_metadata.get('tags')) + normalize_tags(file_metadata.get('tag'))
+            )
             
            
             frontmatter_priority_raw = file_metadata.get('prioridade') or file_metadata.get('priority')
@@ -132,11 +140,11 @@ def get_todos(
                         continue
                     
                    
-                    inline_tags = extract_tags(line)
+                    inline_tags = extract_inline_tags(line)
                     inline_priority = extract_priority_emoji(line)
                     
                     
-                    all_tags = list(set(frontmatter_tags + inline_tags))
+                    all_tags = unique_tags(frontmatter_tags + inline_tags)
                     
                    
                     final_priority = inline_priority or frontmatter_priority
@@ -144,7 +152,7 @@ def get_todos(
                     
                     clean_text = line.strip()
                     clean_text = re.sub(r'🔴|🟡|🟢|⚫', '', clean_text).strip()
-                    clean_text = re.sub(r'#\w+', '', clean_text).strip()
+                    clean_text = INLINE_TAG_RE.sub('', clean_text).strip()
                     
                     todo = {
                         "file": str(relative_path),
@@ -278,6 +286,123 @@ def update_frontmatter(
         "success": True,
         "file": vault.relative(full_path),
         "frontmatter": to_jsonable(metadata)
+    }, indent=2, ensure_ascii=False)
+
+
+@mcp.tool()
+def search_notes(
+    query: Optional[str] = None,
+    regex: bool = False,
+    case_sensitive: bool = False,
+    tags: Optional[list[str]] = None,
+    frontmatter: Optional[dict[str, Any]] = None,
+    folder: Optional[str] = None,
+    max_results: int = 50,
+    max_matches_per_note: int = 20
+) -> str:
+    """
+    Busca notas por texto, regex, tags e/ou campos do frontmatter.
+    Os filtros são combinados (AND). Informe pelo menos um deles.
+
+    Parâmetros:
+    - query: Texto a procurar no conteúdo (ou regex, se regex=True)
+    - regex: Interpreta query como expressão regular Python
+    - case_sensitive: Diferencia maiúsculas/minúsculas (padrão: não)
+    - tags: Nota deve ter todas as tags (inline ou frontmatter). "projeto" inclui "projeto/x"
+    - frontmatter: Campos que devem casar (ex: {"status": "draft", "tags": "api"})
+    - folder: Restringe a busca a uma pasta (ex: "Projects")
+    - max_results: Máximo de notas retornadas (1-200)
+    - max_matches_per_note: Máximo de trechos por nota (1-100)
+
+    As notas são ordenadas pela quantidade de linhas que casam com a query.
+    Os números de linha (0-indexed) valem para o arquivo inteiro.
+    """
+    if not query and not tags and not frontmatter:
+        return error_response("Informe 'query', 'tags' e/ou 'frontmatter'")
+
+    max_results = min(max(max_results, 1), 200)
+    max_matches_per_note = min(max(max_matches_per_note, 1), 100)
+
+    try:
+        pattern = compile_query(query, regex, case_sensitive) if query else None
+        notes = list(vault.iter_notes(folder))
+    except (SearchError, VaultPathError) as e:
+        return error_response(str(e))
+
+    results = []
+    for md_file in notes:
+        try:
+            content = vault.read_text(md_file)
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        metadata, body, _ = extract_frontmatter(content)
+        if not matches_frontmatter(metadata, frontmatter):
+            continue
+
+        file_tags = note_tags(metadata, body)
+        if tags and not has_all_tags(file_tags, tags):
+            continue
+
+        matches, match_count = [], 0
+        if pattern:
+            matches, match_count = find_matches(content, pattern, max_matches_per_note)
+            if not match_count:
+                continue
+
+        results.append({
+            "file": vault.relative(md_file),
+            "tags": file_tags,
+            "match_count": match_count,
+            "matches": matches
+        })
+
+    results.sort(key=lambda r: (-r["match_count"], r["file"]))
+
+    return json.dumps({
+        "results": results[:max_results],
+        "count": min(len(results), max_results),
+        "total_notes_matched": len(results),
+        "truncated": len(results) > max_results,
+        "filters": {
+            "query": query,
+            "regex": regex,
+            "case_sensitive": case_sensitive,
+            "tags": tags,
+            "frontmatter": frontmatter,
+            "folder": folder
+        }
+    }, indent=2, ensure_ascii=False, default=str)
+
+
+@mcp.tool()
+def list_tags(folder: Optional[str] = None) -> str:
+    """
+    Lista todas as tags do vault (inline e frontmatter) com o número de
+    notas em que aparecem, da mais usada para a menos usada.
+
+    Parâmetros:
+    - folder: Restringe a uma pasta (ex: "Projects")
+    """
+    try:
+        notes = list(vault.iter_notes(folder))
+    except VaultPathError as e:
+        return error_response(str(e))
+
+    counts: dict[str, int] = {}
+    for md_file in notes:
+        try:
+            metadata, body, _ = extract_frontmatter(vault.read_text(md_file))
+        except (OSError, UnicodeDecodeError):
+            continue
+        for tag in note_tags(metadata, body):
+            counts[tag] = counts.get(tag, 0) + 1
+
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+    return json.dumps({
+        "tags": [{"tag": tag, "notes": count} for tag, count in ordered],
+        "count": len(ordered)
     }, indent=2, ensure_ascii=False)
 
 
