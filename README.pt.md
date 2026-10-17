@@ -129,12 +129,47 @@ Depois abra *Cursor Settings → MCP*: o `obsidian-mcp` deve aparecer com um pon
 - **Logs:** o Claude Desktop grava em `~/Library/Logs/Claude/mcp-server-obsidian-mcp.log` (macOS) ou `%APPDATA%\Claude\logs` (Windows); o Cursor mostra em *Output → MCP Logs*.
 - **Testar o servidor manualmente:** `npx @modelcontextprotocol/inspector venv/bin/python3 src/obsidian_mcp.py`
 
+## Arquitetura
+
+O código segue uma arquitetura em camadas (limpa / hexagonal). As dependências só apontam para dentro: `adapters → application → core`.
+
+```
+src/
+├── obsidian_mcp.py      Composição: conecta adapters e serviços e sobe o servidor
+├── core/                Regras de domínio. Só biblioteca padrão; sem MCP, disco ou YAML
+│   ├── paths.py         Regras de caminho (traversal, pastas internas, só .md)
+│   ├── frontmatter.py   Separa/monta o bloco de frontmatter, via a porta FrontmatterCodec
+│   ├── tags.py          Regras de tags do Obsidian (aninhadas, sem caixa, blocos de código)
+│   ├── search.py        Consulta, correspondência, trechos e ranking
+│   ├── todos.py         Leitura de checkboxes, filtros e marcação
+│   ├── i18n.py          Palavras de prioridade por idioma
+│   ├── ports.py         Interfaces NoteRepository e FrontmatterCodec
+│   └── errors.py        Erros de domínio
+├── application/         Casos de uso que orquestram o core pelas portas
+│   ├── notes.py         Conteúdo, frontmatter, tags e projetos
+│   ├── todos.py         Listar e concluir to-dos
+│   └── search.py        Busca de notas
+└── adapters/            O mundo externo
+    ├── filesystem.py    NoteRepository em disco (symlinks, escrita atômica)
+    ├── yaml_codec.py    FrontmatterCodec com ruamel.yaml (round-trip)
+    └── mcp_server.py    Tools MCP: argumentos → casos de uso → JSON
+```
+
+Onde colocar cada mudança:
+
+- **Nova regra sobre notas** (ex.: ler wikilinks): uma função em `core/`, testada com strings simples.
+- **Nova capacidade**: um método em um serviço de `application/`, testado com um repositório em memória.
+- **Nova tool**: um método em `VaultTools` e o nome em `TOOL_NAMES` (`adapters/mcp_server.py`).
+- **Novo armazenamento** (ex.: API REST do Obsidian): uma classe que implemente `NoteRepository`, conectada em `obsidian_mcp.py`.
+
 ## Desenvolvimento
 
 ```bash
 pip install -r requirements-dev.txt
 pytest
 ```
+
+Os testes espelham as camadas: `tests/core` (funções puras), `tests/application` (repositório em memória) e `tests/adapters` (disco, YAML e MCP reais).
 
 ## Encontrou um bug?
 
