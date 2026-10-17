@@ -1,6 +1,6 @@
 # Obsidian MCP Server
 
-Um servidor [MCP](https://modelcontextprotocol.io) que conecta seu vault do Obsidian ao Claude Desktop e ao Cursor, para que a IA leia, filtre e conclua seus to-dos sem você precisar copiar e colar tarefas.
+Um servidor [MCP](https://modelcontextprotocol.io) que conecta seu vault do Obsidian ao Claude Desktop e ao Cursor, para que a IA busque nas suas notas, leia e atualize seus metadados e gerencie seus to-dos sem você precisar copiar e colar nada.
 
 🇬🇧 [English version](README.md)
 
@@ -8,22 +8,34 @@ Um servidor [MCP](https://modelcontextprotocol.io) que conecta seu vault do Obsi
 
 | Ferramenta | Descrição |
 |------------|-----------|
-| `get_todos` | Lista to-dos (`- [ ]` / `- [x]`) de todo o vault, com filtros `folder`, `tag`, `priority`, `completed` e `language` |
+| `search_notes` | Busca notas por texto ou regex, por tags e por campos do frontmatter (tudo combinável), retornando as linhas encontradas com seus números |
+| `list_tags` | Lista todas as tags do vault (inline e frontmatter) com a quantidade de notas que usam cada uma |
+| `get_frontmatter` | Retorna o frontmatter YAML de uma nota em JSON |
+| `update_frontmatter` | Cria, altera ou remove chaves do frontmatter, mantendo comentários, ordem das chaves e o corpo da nota intactos |
+| `get_todos` | Lista to-dos (`- [ ]` / `- [x]`), com filtros `folder`, `tag`, `priority`, `completed` e `language` |
 | `update_todo` | Marca um to-do como concluído/pendente (pelo caminho da nota e número da linha) |
 | `get_note_content` | Retorna o conteúdo completo de uma nota |
 | `list_projects` | Lista os projetos encontrados no frontmatter das notas |
 | `get_supported_languages` | Lista os idiomas aceitos para palavras de prioridade |
 
-### Organizando seus to-dos (tudo opcional e combinável)
+Exemplos de pedidos:
 
-- **Tags inline:** `- [ ] Corrigir login #urgente #backend`
+- *"Encontre notas que falam de OAuth em Projects"* · *"Busque a regex `TODO\(\w+\)`"*
+- *"Quais notas têm a tag #projeto e `status: rascunho`?"*
+- *"Defina `status: concluído` no frontmatter de Projects/oloroke.md"*
+- *"Mostre minhas tarefas #backend de alta prioridade"* · *"Marque a linha 5 de Projects/x.md como concluída"*
+
+### Organizando suas notas (tudo opcional e combinável)
+
+- **Tags inline:** `- [ ] Corrigir login #urgente #backend`. Tags aninhadas funcionam como no Obsidian: filtrar por `projeto` também encontra `#projeto/api`. Tags dentro de blocos de código, URLs (`pagina#ancora`) e links (`[[Nota#Seção]]`) são ignoradas.
 - **Emoji de prioridade:** 🔴 alta · 🟡 média · 🟢 baixa · ⚫ bloqueada
-- **Frontmatter YAML:** `projeto`/`project`, `prioridade`/`priority`, `tags`
+- **Frontmatter YAML:** `projeto`/`project`, `prioridade`/`priority`, `tags` (lista ou `"a, b"`) e qualquer campo próprio que você queira usar na busca
 
 ```markdown
 ---
 projeto: oloroke
 prioridade: alta
+status: rascunho
 tags: [backend]
 ---
 - [ ] 🔴 Implementar OAuth #urgente
@@ -31,29 +43,49 @@ tags: [backend]
 
 As palavras de prioridade funcionam em **pt, en, es, fr, de, it**. Para adicionar outro idioma, veja [src/examples/add_custom_language.py](src/examples/add_custom_language.py).
 
-Exemplos de pedidos: *"Mostre minhas tarefas #backend de alta prioridade"* · *"O que está bloqueado em Projects/oloroke?"* · *"Marque a linha 5 de Projects/x.md como concluída"*
+### Segurança
+
+O servidor só acessa arquivos dentro de `OBSIDIAN_VAULT_PATH`:
+
+- Caminhos absolutos, `..` que saem do vault e symlinks que apontam para fora dele são rejeitados.
+- `.obsidian/`, `.trash/` e `.git/` nunca são lidos nem alterados; só notas `.md` podem ser abertas ou editadas.
+- As escritas são atômicas (arquivo temporário + rename), mantêm as quebras de linha do arquivo e são recusadas se o frontmatter existente tiver YAML inválido.
 
 ## Requisitos
 
-- macOS, Python 3.11+
+- Python 3.11+
 - Claude Desktop ou Cursor
 - Um vault do Obsidian
 
 ## Instalação
 
+### 1. Instalar
+
 ```bash
 git clone git@github.com:apaulineoliveira/obsidian-mcp.git
 cd obsidian-mcp
 python3.11 -m venv venv
-source venv/bin/activate
+source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env   # defina OBSIDIAN_VAULT_PATH com o caminho completo do seu vault
 ```
 
-Registre o servidor na configuração do seu cliente, usando **caminhos absolutos**:
+Pegue os caminhos absolutos que serão usados no próximo passo:
 
-- Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Cursor: `~/.cursor/mcp.json`
+```bash
+echo "$PWD/venv/bin/python3"      # command
+echo "$PWD/src/obsidian_mcp.py"   # script
+```
+
+### 2a. Claude Desktop
+
+Abra o arquivo de configuração (ou vá em *Settings → Developer → Edit Config*):
+
+| SO | Caminho |
+|----|---------|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+
+Adicione o servidor dentro de `mcpServers` (mantenha os servidores que já estiverem lá):
 
 ```json
 {
@@ -67,13 +99,42 @@ Registre o servidor na configuração do seu cliente, usando **caminhos absoluto
 }
 ```
 
-Feche totalmente (Cmd+Q) e reabra o cliente. Depois é só perguntar: *"Quais são meus to-dos no Obsidian?"*
+No Windows, use `venv\\Scripts\\python.exe` e escape as barras invertidas (`C:\\Users\\eu\\vault`).
+
+Feche totalmente o Claude Desktop (Cmd+Q / sair pela bandeja) e abra de novo. As ferramentas aparecem no menu 🔨 / conectores da caixa de mensagem.
+
+### 2b. Cursor
+
+Use o mesmo bloco `mcpServers` em um destes arquivos:
+
+- `~/.cursor/mcp.json` — disponível em todos os projetos
+- `.cursor/mcp.json` dentro de um projeto — só para aquele projeto
+
+Depois abra *Cursor Settings → MCP*: o `obsidian-mcp` deve aparecer com um ponto verde e a lista de ferramentas. As ferramentas são usadas pelo modo **Agent** do chat.
+
+### Configurando o caminho do vault
+
+`OBSIDIAN_VAULT_PATH` deve ser o caminho absoluto da pasta do vault (a que contém `.obsidian/`). Ele é lido, em ordem de prioridade, de:
+
+1. O bloco `env` da configuração do cliente (recomendado)
+2. Um arquivo `.env` na raiz do repositório (`cp .env.example .env`)
+3. Padrão: `~/Obsidian`
 
 ## Problemas comuns
 
-- **Claude não enxerga o servidor:** confira se o JSON de configuração é válido, se os caminhos existem e se reiniciou o cliente.
-- **`ModuleNotFoundError: mcp`:** o `command` deve apontar para `venv/bin/python3`, não para o Python do sistema.
-- **Nenhum to-do retornado:** verifique o `OBSIDIAN_VAULT_PATH` e se as tarefas usam o formato `- [ ]`.
+- **O servidor não aparece:** valide o JSON de configuração, confirme que os dois caminhos existem e reinicie o cliente por completo.
+- **`ModuleNotFoundError: mcp`:** o `command` deve apontar para o Python do venv, não para o do sistema.
+- **`Vault não encontrado`:** o `OBSIDIAN_VAULT_PATH` está errado ou não é absoluto.
+- **`Caminho fora do vault`:** use caminhos relativos ao vault, ex.: `Projects/x.md`.
+- **Logs:** o Claude Desktop grava em `~/Library/Logs/Claude/mcp-server-obsidian-mcp.log` (macOS) ou `%APPDATA%\Claude\logs` (Windows); o Cursor mostra em *Output → MCP Logs*.
+- **Testar o servidor manualmente:** `npx @modelcontextprotocol/inspector venv/bin/python3 src/obsidian_mcp.py`
+
+## Desenvolvimento
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
 
 ## Encontrou um bug?
 
@@ -82,8 +143,8 @@ Abra uma [issue](https://github.com/apaulineoliveira/obsidian-mcp/issues) inform
 ## Como contribuir
 
 1. Faça um fork e crie uma branch (`git checkout -b feature/minha-mudanca`)
-2. Faça sua alteração e teste localmente
-3. Commit seguindo [Conventional Commits](https://www.conventionalcommits.org) (ex.: `feat(filtering): ...`)
+2. Faça sua alteração, adicione testes e rode `pytest`
+3. Commit seguindo [Conventional Commits](https://www.conventionalcommits.org) (ex.: `feat(search): ...`)
 4. Abra um pull request explicando o quê e por quê
 
 ## Licença
