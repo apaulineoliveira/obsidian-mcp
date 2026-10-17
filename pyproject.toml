@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obsidian-mcp"
+version = "0.1.0"
+description = "MCP server that lets Claude Desktop and Cursor search, read and update an Obsidian vault"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Pauline Oliveira" }]
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.0",
+    "python-dotenv>=1.0.0",
+    "ruamel.yaml>=0.18",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["core", "application", "adapters"]
+py-modules = ["obsidian_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
