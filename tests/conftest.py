@@ -5,8 +5,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import obsidian_mcp
-from vault import Vault
+from adapters.filesystem import FileSystemVault
+from adapters.mcp_server import VaultTools
+from adapters.yaml_codec import RuamelFrontmatterCodec
+from application import build_services
 
 
 @pytest.fixture
@@ -17,13 +19,15 @@ def vault_dir(tmp_path):
 
 
 @pytest.fixture
-def server(vault_dir, monkeypatch):
-    monkeypatch.setattr(obsidian_mcp, "vault", Vault(vault_dir))
-    return obsidian_mcp
+def write(vault_dir):
+    def _write(relative: str, content: str, root: Path = vault_dir) -> Path:
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+    return _write
 
 
-def write(root: Path, relative: str, content: str) -> Path:
-    path = root / relative
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    return path
+@pytest.fixture
+def tools(vault_dir):
+    return VaultTools(build_services(FileSystemVault(vault_dir), RuamelFrontmatterCodec()))
