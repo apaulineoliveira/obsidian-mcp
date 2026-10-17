@@ -7,7 +7,7 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from mcp.server.mcpserver import MCPServer
 
-from i18n import (
+from core.i18n import (
     normalize_priority,
     extract_priority_emoji,
     get_supported_languages
@@ -416,7 +416,7 @@ def get_supported_languages() -> str:
     Retorna:
         JSON com lista de códigos de idioma
     """
-    from i18n import get_supported_languages as get_langs
+    from core.i18n import get_supported_languages as get_langs
 
     langs = get_langs()
     lang_names = {

@@ -39,6 +39,16 @@ LANGUAGES = {
 }
 
 
+LANGUAGE_NAMES = {
+    'pt': 'Português (Portuguese)',
+    'en': 'English (English)',
+    'es': 'Español (Spanish)',
+    'fr': 'Français (French)',
+    'de': 'Deutsch (German)',
+    'it': 'Italiano (Italian)',
+}
+
+
 EMOJI_PRIORITY = {
     '🔴': 'high',
     '🟡': 'medium',

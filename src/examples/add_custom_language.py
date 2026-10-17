@@ -1,4 +1,4 @@
-from src.i18n import add_language, normalize_priority, print_supported_keywords
+from src.core.i18n import add_language, normalize_priority, print_supported_keywords
 
 
 def add_japanese():
@@ -139,7 +139,7 @@ def show_usage():
    add_japanese()
 
 3. OPTION C: Manually add your own language:
-   from src.i18n import add_language
+   from src.core.i18n import add_language
 
    add_language('high', 'your-lang-code', ['keyword1', 'keyword2', ...])
    add_language('medium', 'your-lang-code', ['...'])
@@ -147,7 +147,7 @@ def show_usage():
    add_language('blocked', 'your-lang-code', ['...'])
 
 4. Test your language:
-   from src.i18n import normalize_priority
+   from src.core.i18n import normalize_priority
 
    result = normalize_priority('your-keyword', language='your-lang-code')
    print(result)  # Should print 'high', 'medium', 'low', or 'blocked'
