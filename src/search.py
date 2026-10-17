@@ -1,11 +1,3 @@
-"""
-Busca sobre o conteúdo Markdown do vault: texto, regex, tags e frontmatter.
-
-Tags seguem as regras do Obsidian: são case-insensitive, aceitam
-letras, números, '_', '-' e '/' (tags aninhadas), e '#tag' dentro de
-blocos de código não conta.
-"""
-
 import re
 from typing import Any, Iterable, Optional
 
@@ -13,18 +5,16 @@ from typing import Any, Iterable, Optional
 MAX_PATTERN_LENGTH = 500
 MAX_SNIPPET_LENGTH = 240
 
-# '#' precedido de letra/número (url#ancora, [[Nota#Seção]], &#123;) não é tag
 INLINE_TAG_RE = re.compile(r"(?<![\w#/&])#([\w/-]+)")
 INLINE_CODE_RE = re.compile(r"`[^`]*`")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
 
 class SearchError(ValueError):
-    """Raised for invalid search parameters"""
+    pass
 
 
 def extract_inline_tags(text: str) -> list[str]:
-    """'- [ ] Fix #urgente #projeto/api' -> ['urgente', 'projeto/api']"""
     tags = []
     in_fence = False
 
@@ -36,7 +26,6 @@ def extract_inline_tags(text: str) -> list[str]:
             continue
         for tag in INLINE_TAG_RE.findall(INLINE_CODE_RE.sub("", line)):
             tag = tag.strip("/")
-            # Obsidian não aceita tags só com números (#2026)
             if tag and not tag.replace("/", "").isdigit():
                 tags.append(tag)
 
@@ -44,7 +33,6 @@ def extract_inline_tags(text: str) -> list[str]:
 
 
 def normalize_tags(value: Any) -> list[str]:
-    """Normaliza 'tags' do frontmatter: lista, 'a, b', 'a b' ou '#a'"""
     if value is None:
         return []
     if isinstance(value, str):
@@ -58,7 +46,6 @@ def normalize_tags(value: Any) -> list[str]:
 
 
 def unique_tags(tags: Iterable[str]) -> list[str]:
-    """Remove duplicatas sem diferenciar maiúsculas, em minúsculas"""
     seen = {}
     for tag in tags:
         seen.setdefault(tag.lower(), None)
@@ -71,7 +58,6 @@ def note_tags(metadata: dict, body: str) -> list[str]:
 
 
 def tag_matches(wanted: str, tag: str) -> bool:
-    """'projeto' casa com 'projeto' e 'projeto/oloroke', mas não com 'projetos'"""
     wanted = wanted.lower().lstrip("#").rstrip("/")
     tag = tag.lower()
     return tag == wanted or tag.startswith(wanted + "/")
@@ -93,7 +79,6 @@ def compile_query(query: str, regex: bool = False, case_sensitive: bool = False)
 
 
 def find_matches(content: str, pattern: re.Pattern, limit: int) -> tuple[list[dict], int]:
-    """Retorna (até `limit` trechos com número da linha, total de linhas com match)"""
     matches = []
     total = 0
 
@@ -120,10 +105,6 @@ def snippet(line: str, start: int, end: int) -> str:
 
 
 def matches_frontmatter(metadata: dict, filters: Optional[dict[str, Any]]) -> bool:
-    """
-    Cada filtro precisa casar: comparação de texto case-insensitive e,
-    se o valor da nota for uma lista, basta conter o valor procurado.
-    """
     for key, expected in (filters or {}).items():
         if key not in metadata:
             return False

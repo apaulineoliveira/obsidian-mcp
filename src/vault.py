@@ -1,26 +1,16 @@
-"""
-Safe access to the Obsidian vault.
-
-Every path received from a client goes through Vault.resolve(), which
-guarantees the final (symlink-resolved) path stays inside the vault root.
-This blocks path traversal (`../../etc/passwd`), absolute paths and
-symlinks that point outside the vault.
-"""
-
 import os
 import tempfile
 from pathlib import Path, PurePath
 from typing import Iterator, Optional
 
 
-# Folders never read or written: Obsidian config, trash and VCS metadata
 IGNORED_DIRS = {".obsidian", ".trash", ".git"}
 
 NOTE_SUFFIX = ".md"
 
 
 class VaultPathError(ValueError):
-    """Raised when a path is invalid or escapes the vault"""
+    pass
 
 
 class Vault:
@@ -34,12 +24,6 @@ class Vault:
             )
 
     def resolve(self, relative: Optional[str] = None, must_exist: bool = True) -> Path:
-        """
-        Converte um caminho relativo ao vault em um caminho absoluto seguro.
-
-        Rejeita caminhos absolutos, caracteres nulos, pastas ignoradas e
-        qualquer caminho que, após resolver '..' e symlinks, saia do vault.
-        """
         self.ensure_exists()
 
         if relative is None or relative.strip() in ("", "."):
@@ -67,7 +51,6 @@ class Vault:
         return candidate
 
     def resolve_note(self, relative: str, must_exist: bool = True) -> Path:
-        """Como resolve(), mas exige um arquivo Markdown (.md)"""
         if not relative or not relative.strip():
             raise VaultPathError("Informe o caminho da nota")
 
@@ -85,16 +68,9 @@ class Vault:
         return path
 
     def relative(self, path: Path) -> str:
-        """Caminho relativo ao vault, sempre com '/' (estável entre SOs)"""
         return path.relative_to(self.root).as_posix()
 
     def iter_notes(self, folder: Optional[str] = None) -> Iterator[Path]:
-        """
-        Percorre as notas .md de uma pasta do vault, em ordem estável.
-
-        Não segue symlinks de pastas e ignora arquivos cujo destino real
-        esteja fora do vault.
-        """
         start = self.resolve_folder(folder)
 
         for dirpath, dirnames, filenames in os.walk(start, followlinks=False):
@@ -110,15 +86,10 @@ class Vault:
 
     @staticmethod
     def read_text(path: Path) -> str:
-        # newline="" preserva \r\n, para que reescritas não alterem o arquivo
         with open(path, "r", encoding="utf-8", newline="") as f:
             return f.read()
 
     def write_text(self, path: Path, content: str) -> None:
-        """
-        Escrita atômica: grava em arquivo temporário na mesma pasta e troca
-        com os.replace, evitando notas corrompidas pela metade.
-        """
         real = path.resolve()
         if not real.is_relative_to(self.root) or self._is_ignored(real):
             raise VaultPathError(f"Escrita fora do vault bloqueada: {path}")

@@ -1,11 +1,3 @@
-"""
-Leitura e escrita de YAML frontmatter em notas Markdown.
-
-A escrita usa o modo round-trip do ruamel.yaml: comentários, ordem das
-chaves e estilo de listas existentes são mantidos, e o corpo da nota é
-preservado byte a byte.
-"""
-
 import datetime
 import io
 from typing import Any, Optional
@@ -26,16 +18,10 @@ _rt_yaml.indent(mapping=2, sequence=4, offset=2)
 
 
 class FrontmatterError(ValueError):
-    """Raised when the frontmatter exists but is not a valid YAML mapping"""
+    pass
 
 
 def split_frontmatter(content: str) -> tuple[Optional[str], str, int]:
-    """
-    Separa o bloco de frontmatter do corpo da nota.
-
-    Retorna (yaml_text ou None, corpo, linhas_ocupadas_pelo_bloco).
-    O bloco só é reconhecido se a primeira linha for exatamente '---'.
-    """
     lines = content.splitlines(keepends=True)
     if not lines or lines[0].rstrip("\r\n").rstrip() != DELIMITER:
         return None, content, 0
@@ -48,11 +34,6 @@ def split_frontmatter(content: str) -> tuple[Optional[str], str, int]:
 
 
 def parse_frontmatter(content: str) -> tuple[dict, str, int]:
-    """
-    Retorna (metadata, corpo, linhas_ocupadas_pelo_bloco).
-
-    Lança FrontmatterError se o YAML for inválido ou não for um mapeamento.
-    """
     yaml_text, body, offset = split_frontmatter(content)
     if yaml_text is None:
         return {}, body, 0
@@ -71,7 +52,6 @@ def parse_frontmatter(content: str) -> tuple[dict, str, int]:
 
 
 def extract_frontmatter(content: str) -> tuple[dict, str, int]:
-    """Versão tolerante de parse_frontmatter: YAML inválido vira {}"""
     try:
         return parse_frontmatter(content)
     except FrontmatterError:
@@ -84,14 +64,6 @@ def update_frontmatter(
     set_values: Optional[dict[str, Any]] = None,
     remove_keys: Optional[list[str]] = None,
 ) -> str:
-    """
-    Aplica alterações ao frontmatter e devolve o novo conteúdo da nota.
-
-    - set_values: chaves a criar ou sobrescrever (chaves novas vão para o fim)
-    - remove_keys: chaves a remover (ausentes são ignoradas)
-
-    Se o frontmatter ficar vazio, o bloco é removido.
-    """
     yaml_text, body, _ = split_frontmatter(content)
     newline = "\r\n" if content.split("\n", 1)[0].endswith("\r") else "\n"
 
@@ -125,7 +97,6 @@ def update_frontmatter(
 
 
 def to_jsonable(value: Any) -> Any:
-    """Converte valores do YAML (datas, mapas ordenados) em tipos JSON"""
     if isinstance(value, dict):
         return {str(k): to_jsonable(v) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):

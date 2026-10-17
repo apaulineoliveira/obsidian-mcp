@@ -1,15 +1,3 @@
-"""
-Obsidian MCP Server with Advanced Filtering and Multilingual Support
-
-Features:
-- Tags inline (#urgente, #backend, #projeto/api)
-- Text, regex, tag and frontmatter search
-- Priority with emoji (🔴🟡🟢)
-- YAML frontmatter metadata (read and update)
-- Path traversal protection for every vault access
-- Multilingual support (PT, EN, ES, FR, DE, IT)
-"""
-
 import json
 import os
 import re
@@ -20,7 +8,7 @@ from dotenv import load_dotenv
 from mcp.server.mcpserver import MCPServer
 
 from i18n import (
-    normalize_priority, 
+    normalize_priority,
     extract_priority_emoji,
     get_supported_languages
 )
@@ -45,7 +33,6 @@ from search import (
 )
 from vault import Vault, VaultPathError
 
-# Variáveis do config do cliente MCP têm prioridade sobre o .env
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 vault = Vault(os.getenv("OBSIDIAN_VAULT_PATH", "~/Obsidian"))
@@ -60,21 +47,16 @@ def error_response(message: str) -> str:
 
 
 def matches_filter(todo: dict, tag: Optional[str], priority: Optional[str]) -> bool:
-    """Verifica se um to-do passa nos filtros"""
-    
-   
     if tag:
         if not has_all_tags(todo.get('tags', []), [tag]):
             return False
-    
-    
+
     if priority:
         todo_priority = todo.get('priority')
         if todo_priority != priority:
             return False
-    
-    return True
 
+    return True
 
 
 @mcp.tool()
@@ -87,14 +69,14 @@ def get_todos(
 ) -> str:
     """
     Extrai todos os to-dos com filtros avançados e suporte multilíngue.
-    
+
     Parâmetros:
     - folder: Pasta específica (ex: "Projects/oloroke")
     - tag: Filtrar por tag (ex: "urgente", "backend"; "projeto" inclui "projeto/x")
     - priority: Filtrar por prioridade ("high", "medium", "low", "blocked")
     - completed: True/False para tarefas completas/incompletas
     - language: Idioma para interpretação ('pt', 'en', 'es', 'fr', 'de', 'it')
-    
+
     Suporta 3 formas de metadata:
     1. Tags inline: - [ ] Tarefa #urgente #backend
     2. Emoji: - [ ] 🔴 Tarefa urgente
@@ -109,51 +91,45 @@ def get_todos(
 
     for md_file in notes:
         relative_path = vault.relative(md_file)
-        
+
         try:
             content = vault.read_text(md_file)
-            
-            
+
             file_metadata, body_content, line_offset = extract_frontmatter(content)
-            
-           
+
+
             frontmatter_tags = (
                 normalize_tags(file_metadata.get('tags')) + normalize_tags(file_metadata.get('tag'))
             )
-            
-           
+
             frontmatter_priority_raw = file_metadata.get('prioridade') or file_metadata.get('priority')
             frontmatter_priority = normalize_priority(
                 str(frontmatter_priority_raw) if frontmatter_priority_raw is not None else None,
                 language=language
             )
-            
+
             lines = body_content.split('\n')
-            
+
             for i, line in enumerate(lines):
                 checkbox = CHECKBOX_RE.match(line)
                 if checkbox:
                     is_completed = checkbox.group(2).lower() == "x"
-                    
-                    
+
                     if completed is not None and is_completed != completed:
                         continue
-                    
-                   
+
                     inline_tags = extract_inline_tags(line)
                     inline_priority = extract_priority_emoji(line)
-                    
-                    
+
                     all_tags = unique_tags(frontmatter_tags + inline_tags)
-                    
-                   
+
+
                     final_priority = inline_priority or frontmatter_priority
-                    
-                    
+
                     clean_text = line.strip()
                     clean_text = re.sub(r'🔴|🟡|🟢|⚫', '', clean_text).strip()
                     clean_text = INLINE_TAG_RE.sub('', clean_text).strip()
-                    
+
                     todo = {
                         "file": str(relative_path),
                         "line": line_offset + i,
@@ -164,13 +140,11 @@ def get_todos(
                         "priority": final_priority,
                         "project": file_metadata.get('projeto') or file_metadata.get('project')
                     }
-                    
-                    
+
                     if matches_filter(todo, tag, priority):
                         todos.append(todo)
-        
+
         except Exception as e:
-            
             pass
 
     return json.dumps({
@@ -201,7 +175,7 @@ def get_note_content(note_path: str) -> str:
 def update_todo(note_path: str, line_number: int, completed: bool) -> str:
     """
     Marca um to-do como completo ou incompleto em uma nota.
-    
+
     Parâmetros:
     - note_path: Caminho da nota (ex: "Projects/oloroke.md")
     - line_number: Número da linha (0-indexed)
@@ -419,15 +393,15 @@ def list_projects() -> str:
     for md_file in notes:
         try:
             content = vault.read_text(md_file)
-            
+
             metadata, _, _ = extract_frontmatter(content)
             project = metadata.get('projeto') or metadata.get('project')
-            
+
             if project:
                 projects.add(str(project))
         except (OSError, UnicodeDecodeError):
             pass
-    
+
     return json.dumps({
         "projects": sorted(list(projects)),
         "count": len(projects)
@@ -438,12 +412,12 @@ def list_projects() -> str:
 def get_supported_languages() -> str:
     """
     Lista todos os idiomas suportados para filtros de prioridade.
-    
+
     Retorna:
         JSON com lista de códigos de idioma
     """
     from i18n import get_supported_languages as get_langs
-    
+
     langs = get_langs()
     lang_names = {
         'pt': 'Português (Portuguese)',
@@ -453,7 +427,7 @@ def get_supported_languages() -> str:
         'de': 'Deutsch (German)',
         'it': 'Italiano (Italian)',
     }
-    
+
     return json.dumps({
         "languages": langs,
         "count": len(langs),

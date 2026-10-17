@@ -5,8 +5,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-import obsidian_mcp  # noqa: E402
-from vault import Vault  # noqa: E402
+import obsidian_mcp
+from vault import Vault
 
 
 @pytest.fixture
@@ -18,7 +18,6 @@ def vault_dir(tmp_path):
 
 @pytest.fixture
 def server(vault_dir, monkeypatch):
-    """Módulo do servidor apontando para um vault temporário"""
     monkeypatch.setattr(obsidian_mcp, "vault", Vault(vault_dir))
     return obsidian_mcp
 
