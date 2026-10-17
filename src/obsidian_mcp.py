@@ -13,6 +13,8 @@ import os
 import re
 from pathlib import Path
 from typing import Optional
+
+from dotenv import load_dotenv
 from mcp.server.mcpserver import MCPServer
 
 try:
@@ -26,10 +28,20 @@ from i18n import (
     extract_priority_emoji,
     get_supported_languages
 )
+from vault import Vault, VaultPathError
 
-vault_path = Path(os.getenv("OBSIDIAN_VAULT_PATH", os.path.expanduser("~/Obsidian")))
+# Variáveis do config do cliente MCP têm prioridade sobre o .env
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+vault = Vault(os.getenv("OBSIDIAN_VAULT_PATH", "~/Obsidian"))
 
 mcp = MCPServer("obsidian-mcp")
+
+CHECKBOX_RE = re.compile(r'^(\s*[-*+]\s+\[)([ xX])(\])')
+
+
+def error_response(message: str) -> str:
+    return json.dumps({"error": message}, ensure_ascii=False)
 
 def extract_tags(text: str) -> list[str]:
     """Extrai tags de uma linha: #urgente #backend -> ['urgente', 'backend']"""
@@ -122,20 +134,17 @@ def get_todos(
     3. YAML frontmatter com prioridade em qualquer idioma
     """
     todos = []
-    search_path = vault_path / folder if folder else vault_path
 
-    if not search_path.exists():
-        return json.dumps(
-            {"error": f"Caminho não encontrado: {search_path}"}, 
-            ensure_ascii=False
-        )
+    try:
+        notes = list(vault.iter_notes(folder))
+    except VaultPathError as e:
+        return error_response(str(e))
 
-    for md_file in search_path.rglob("*.md"):
-        relative_path = md_file.relative_to(vault_path)
+    for md_file in notes:
+        relative_path = vault.relative(md_file)
         
         try:
-            with open(md_file, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = vault.read_text(md_file)
             
             
             file_metadata, body_content = extract_frontmatter(content)
@@ -152,8 +161,9 @@ def get_todos(
             lines = body_content.split('\n')
             
             for i, line in enumerate(lines):
-                if "- [ ]" in line or "- [x]" in line:
-                    is_completed = "[x]" in line
+                checkbox = CHECKBOX_RE.match(line)
+                if checkbox:
+                    is_completed = checkbox.group(2).lower() == "x"
                     
                     
                     if completed is not None and is_completed != completed:
@@ -209,15 +219,12 @@ def get_todos(
 @mcp.tool()
 def get_note_content(note_path: str) -> str:
     """Lê o conteúdo completo de uma nota do Obsidian"""
-    full_path = vault_path / note_path
-    if not full_path.exists():
-        return json.dumps(
-            {"error": f"Nota não encontrada: {note_path}"}, 
-            ensure_ascii=False
-        )
-    
-    with open(full_path, 'r', encoding='utf-8') as f:
-        return f.read()
+    try:
+        full_path = vault.resolve_note(note_path)
+    except VaultPathError as e:
+        return error_response(str(e))
+
+    return vault.read_text(full_path)
 
 
 @mcp.tool()
@@ -230,27 +237,23 @@ def update_todo(note_path: str, line_number: int, completed: bool) -> str:
     - line_number: Número da linha (0-indexed)
     - completed: True para marcar como [x], False para [ ]
     """
-    full_path = vault_path / note_path
-    if not full_path.exists():
-        return json.dumps(
-            {"error": f"Nota não encontrada: {note_path}"}, 
-            ensure_ascii=False
-        )
+    try:
+        full_path = vault.resolve_note(note_path)
+    except VaultPathError as e:
+        return error_response(str(e))
 
-    with open(full_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
+    lines = vault.read_text(full_path).splitlines(keepends=True)
 
-    if line_number >= len(lines):
-        return json.dumps(
-            {"error": "Linha não existe"}, 
-            ensure_ascii=False
-        )
+    if not 0 <= line_number < len(lines):
+        return error_response("Linha não existe")
 
-    checkbox = "[x]" if completed else "[ ]"
-    lines[line_number] = lines[line_number].replace("[ ]", checkbox).replace("[x]", checkbox)
+    if not CHECKBOX_RE.match(lines[line_number]):
+        return error_response(f"A linha {line_number} não é um to-do (- [ ] / - [x])")
 
-    with open(full_path, 'w', encoding='utf-8') as f:
-        f.writelines(lines)
+    mark = "x" if completed else " "
+    lines[line_number] = CHECKBOX_RE.sub(rf"\g<1>{mark}\g<3>", lines[line_number], count=1)
+
+    vault.write_text(full_path, "".join(lines))
 
     return json.dumps({
         "success": True,
@@ -262,18 +265,22 @@ def update_todo(note_path: str, line_number: int, completed: bool) -> str:
 def list_projects() -> str:
     """Lista todos os projetos encontrados nas notas (via frontmatter)"""
     projects = set()
-    
-    for md_file in vault_path.rglob("*.md"):
+
+    try:
+        notes = list(vault.iter_notes())
+    except VaultPathError as e:
+        return error_response(str(e))
+
+    for md_file in notes:
         try:
-            with open(md_file, 'r', encoding='utf-8') as f:
-                content = f.read()
+            content = vault.read_text(md_file)
             
             metadata, _ = extract_frontmatter(content)
             project = metadata.get('projeto') or metadata.get('project')
             
             if project:
-                projects.add(project)
-        except:
+                projects.add(str(project))
+        except (OSError, UnicodeDecodeError):
             pass
     
     return json.dumps({
