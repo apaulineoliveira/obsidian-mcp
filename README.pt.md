@@ -66,7 +66,7 @@ git clone git@github.com:apaulineoliveira/obsidian-mcp.git
 cd obsidian-mcp
 python3.11 -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 Pegue os caminhos absolutos que serão usados no próximo passo:
@@ -167,7 +167,7 @@ Onde colocar cada mudança:
 ## Desenvolvimento
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 pytest
 ```
 
