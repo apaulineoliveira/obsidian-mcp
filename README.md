@@ -1,4 +1,5 @@
 # Obsidian MCP Server
+Article on Medium: https://paulineoliveira.medium.com/por-que-eu-fiz-o-claude-e-o-cursor-lerem-meus-to-dos-no-obsidian-4f0ab55eed84?postPublishedType=initial
 
 An [MCP](https://modelcontextprotocol.io) server that connects your Obsidian vault to Claude Desktop and Cursor, so the AI can search your notes, read and update their metadata, and manage your to-dos without you copying and pasting anything.
 
