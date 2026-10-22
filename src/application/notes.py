@@ -17,6 +17,9 @@ class NoteService:
     def get_content(self, note_path: str) -> str:
         return self.repository.read(note_path)
 
+    def create_note(self, note_path: str, content: str) -> None:
+        self.repository.create(note_path, content)
+
     def get_frontmatter(self, note_path: str) -> dict:
         content = self.repository.read(note_path)
         return self.frontmatter.parse(content).metadata

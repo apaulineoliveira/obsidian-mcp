@@ -14,7 +14,15 @@ class NoteNotFoundError(DomainError):
     pass
 
 
+class NoteAlreadyExistsError(DomainError):
+    pass
+
+
 class NoteReadError(DomainError):
+    pass
+
+
+class NoteWriteError(DomainError):
     pass
 
 

@@ -8,6 +8,7 @@ from application.languages import supported_language_names
 from core.errors import (
     FrontmatterError,
     InvalidPathError,
+    NoteAlreadyExistsError,
     NoteNotFoundError,
     NoteReadError,
     SearchError,
@@ -40,6 +41,12 @@ class InMemoryRepository:
 
     def write(self, note_path: str, content: str) -> None:
         self.read(note_path)
+        self.notes[note_path] = content
+        self.written_paths.append(note_path)
+
+    def create(self, note_path: str, content: str) -> None:
+        if note_path in self.notes:
+            raise NoteAlreadyExistsError(f"A nota já existe: {note_path}")
         self.notes[note_path] = content
         self.written_paths.append(note_path)
 
@@ -83,6 +90,14 @@ def services(repository):
 def found_files(services, **query_fields) -> list[str]:
     result = services.search.search(SearchQuery(**query_fields))
     return [note.file for note in result.notes]
+
+
+def test_create_note(services, repository):
+    services.notes.create_note("Artigos/novo.md", "---\nstatus: draft\n---\nTexto\n")
+    assert services.notes.get_frontmatter("Artigos/novo.md") == {"status": "draft"}
+    with pytest.raises(NoteAlreadyExistsError):
+        services.notes.create_note("Diario/hoje.md", "x")
+    assert repository.notes["Diario/hoje.md"] == NOTES["Diario/hoje.md"]
 
 
 def test_get_content_and_frontmatter(services):

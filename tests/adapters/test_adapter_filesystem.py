@@ -4,7 +4,14 @@ from pathlib import Path
 import pytest
 
 from adapters.filesystem import FileSystemVault
-from core.errors import InvalidPathError, NoteNotFoundError, NoteReadError, VaultNotFoundError
+from core.errors import (
+    InvalidPathError,
+    NoteAlreadyExistsError,
+    NoteNotFoundError,
+    NoteReadError,
+    NoteWriteError,
+    VaultNotFoundError,
+)
 
 
 def put(root: Path, relative: str, content: str = "") -> Path:
@@ -27,6 +34,27 @@ def test_read_and_write_notes(fs, vault_dir):
     assert [p.name for p in (vault_dir / "a").iterdir()] == ["n.md"]
 
 
+def test_create_note_in_new_folder(fs, vault_dir):
+    fs.create("Artigos/novo/rascunho.md", "# Título\r\n")
+    assert (vault_dir / "Artigos/novo/rascunho.md").read_bytes() == "# Título\r\n".encode()
+    assert fs.read("Artigos/novo/rascunho.md") == "# Título\r\n"
+
+
+def test_create_never_overwrites(fs, vault_dir):
+    put(vault_dir, "n.md", "original")
+    put(vault_dir, "pasta.md/n.md")
+    for path in ("n.md", "pasta.md"):
+        with pytest.raises(NoteAlreadyExistsError):
+            fs.create(path, "novo")
+    assert (vault_dir / "n.md").read_text() == "original"
+
+
+def test_create_reports_folder_blocked_by_a_file(fs, vault_dir):
+    put(vault_dir, "arquivo", "x")
+    with pytest.raises(NoteWriteError):
+        fs.create("arquivo/n.md", "novo")
+
+
 @pytest.mark.parametrize("path", ["../secret.md", "/etc/passwd", ".obsidian/x.md"])
 def test_rejects_unsafe_paths(fs, vault_dir, path):
     put(vault_dir.parent, "secret.md", "segredo")
@@ -34,7 +62,10 @@ def test_rejects_unsafe_paths(fs, vault_dir, path):
         fs.read(path)
     with pytest.raises(InvalidPathError):
         fs.write(path, "x")
+    with pytest.raises(InvalidPathError):
+        fs.create(path, "x")
     assert (vault_dir.parent / "secret.md").read_text() == "segredo"
+    assert not (vault_dir / ".obsidian").exists()
 
 
 def test_rejects_symlinks_escaping_vault(fs, vault_dir, tmp_path):
@@ -47,6 +78,10 @@ def test_rejects_symlinks_escaping_vault(fs, vault_dir, tmp_path):
     for path in ("link.md", "linkdir/secret.md", "cfg/c.md"):
         with pytest.raises(InvalidPathError):
             fs.read(path)
+    for path in ("link.md", "linkdir/novo.md", "cfg/novo.md"):
+        with pytest.raises(InvalidPathError):
+            fs.create(path, "x")
+    assert not (outside.parent / "novo.md").exists()
 
 
 def test_missing_note_and_vault(fs, vault_dir, tmp_path):

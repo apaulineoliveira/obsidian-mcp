@@ -16,6 +16,7 @@ An [MCP](https://modelcontextprotocol.io) server that connects your Obsidian vau
 | `get_todos` | Lists to-dos (`- [ ]` / `- [x]`), filterable by `folder`, `tag`, `priority`, `completed` and `language` |
 | `update_todo` | Marks a to-do as done/undone (by note path and line number) |
 | `get_note_content` | Returns the full content of a note |
+| `create_note` | Creates a new note (and any missing folders), never overwriting an existing note |
 | `list_projects` | Lists projects found in notes' frontmatter |
 | `get_supported_languages` | Lists languages accepted for priority keywords |
 
@@ -25,6 +26,7 @@ Example prompts:
 - *"Which notes are tagged #project and have `status: draft`?"*
 - *"Set `status: done` in the frontmatter of Projects/oloroke.md"*
 - *"Show my high-priority #backend tasks"* · *"Mark line 5 of Projects/x.md as done"*
+- *"Save this summary as a note in Study/mcp.md"*
 
 ### Organizing your notes (all optional, can be combined)
 
@@ -50,7 +52,8 @@ The server only touches files inside `OBSIDIAN_VAULT_PATH`:
 
 - Absolute paths, `..` that leave the vault, and symlinks pointing outside it are rejected.
 - `.obsidian/`, `.trash/` and `.git/` are never read or written; only `.md` notes can be opened or edited.
-- Writes are atomic (temp file + rename), keep the file's line endings, and are refused if the existing frontmatter is invalid YAML.
+- Edits are atomic (temp file + rename), keep the file's line endings, and are refused if the existing frontmatter is invalid YAML.
+- A new note is only created when nothing exists at that path yet: `create_note` never overwrites.
 
 ## Requirements
 
@@ -148,7 +151,7 @@ src/
 │   └── errors.py        Domain errors
 ├── application/         Use cases that orchestrate the core through the ports
 │   ├── vault_notes.py   Reads every note once, already split into metadata and body
-│   ├── notes.py         Content, frontmatter, tags and projects
+│   ├── notes.py         Content, creation, frontmatter, tags and projects
 │   ├── todos.py         List and complete to-dos
 │   ├── search.py        Note search
 │   └── languages.py     Supported languages

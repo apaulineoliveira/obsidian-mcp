@@ -3,7 +3,14 @@ import tempfile
 from pathlib import Path
 from typing import Iterator, Optional
 
-from core.errors import InvalidPathError, NoteNotFoundError, NoteReadError, VaultNotFoundError
+from core.errors import (
+    InvalidPathError,
+    NoteAlreadyExistsError,
+    NoteNotFoundError,
+    NoteReadError,
+    NoteWriteError,
+    VaultNotFoundError,
+)
 from core.paths import (
     is_inside_internal_folder,
     is_note_filename,
@@ -31,6 +38,23 @@ class FileSystemVault:
 
     def write(self, note_path: str, content: str) -> None:
         write_atomically(self._existing_note(note_path), content)
+
+    def create(self, note_path: str, content: str) -> None:
+        safe_note_path(note_path)
+        path = self._absolute_path(note_path)
+        if path.exists():
+            raise NoteAlreadyExistsError(f"A nota já existe: {note_path}")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            raise NoteWriteError(f"Não foi possível criar a pasta da nota {note_path}: {error}") from error
+        try:
+            with open(path, "x", encoding="utf-8", newline="") as file:
+                file.write(content)
+        except FileExistsError as error:
+            raise NoteAlreadyExistsError(f"A nota já existe: {note_path}") from error
+        except OSError as error:
+            raise NoteWriteError(f"Não foi possível criar a nota {note_path}: {error}") from error
 
     def _existing_folder(self, folder: Optional[str]) -> Path:
         path = self._absolute_path(folder)
