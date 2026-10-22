@@ -15,6 +15,7 @@ Um servidor [MCP](https://modelcontextprotocol.io) que conecta seu vault do Obsi
 | `get_todos` | Lista to-dos (`- [ ]` / `- [x]`), com filtros `folder`, `tag`, `priority`, `completed` e `language` |
 | `update_todo` | Marca um to-do como concluído/pendente (pelo caminho da nota e número da linha) |
 | `get_note_content` | Retorna o conteúdo completo de uma nota |
+| `create_note` | Cria uma nota nova (e as pastas que faltarem), sem nunca sobrescrever uma nota existente |
 | `list_projects` | Lista os projetos encontrados no frontmatter das notas |
 | `get_supported_languages` | Lista os idiomas aceitos para palavras de prioridade |
 
@@ -24,6 +25,7 @@ Exemplos de pedidos:
 - *"Quais notas têm a tag #projeto e `status: rascunho`?"*
 - *"Defina `status: concluído` no frontmatter de Projects/oloroke.md"*
 - *"Mostre minhas tarefas #backend de alta prioridade"* · *"Marque a linha 5 de Projects/x.md como concluída"*
+- *"Salve esse resumo como uma nota em Estudos/mcp.md"*
 
 ### Organizando suas notas (tudo opcional e combinável)
 
@@ -49,7 +51,8 @@ O servidor só acessa arquivos dentro de `OBSIDIAN_VAULT_PATH`:
 
 - Caminhos absolutos, `..` que saem do vault e symlinks que apontam para fora dele são rejeitados.
 - `.obsidian/`, `.trash/` e `.git/` nunca são lidos nem alterados; só notas `.md` podem ser abertas ou editadas.
-- As escritas são atômicas (arquivo temporário + rename), mantêm as quebras de linha do arquivo e são recusadas se o frontmatter existente tiver YAML inválido.
+- As edições são atômicas (arquivo temporário + rename), mantêm as quebras de linha do arquivo e são recusadas se o frontmatter existente tiver YAML inválido.
+- Uma nota nova só é criada se ainda não existir nada naquele caminho: `create_note` nunca sobrescreve.
 
 ## Requisitos
 
@@ -147,7 +150,7 @@ src/
 │   └── errors.py        Erros de domínio
 ├── application/         Casos de uso que orquestram o core pelas portas
 │   ├── vault_notes.py   Lê cada nota uma vez, já separada em metadados e corpo
-│   ├── notes.py         Conteúdo, frontmatter, tags e projetos
+│   ├── notes.py         Conteúdo, criação, frontmatter, tags e projetos
 │   ├── todos.py         Listar e concluir to-dos
 │   ├── search.py        Busca de notas
 │   └── languages.py     Idiomas suportados

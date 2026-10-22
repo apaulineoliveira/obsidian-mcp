@@ -63,6 +63,14 @@ def test_update_todo(tools, write):
     assert call(tools.update_todo, "Projects/x.md", 6, True) == {"error": "A linha 6 não é um to-do (- [ ] / - [x])"}
 
 
+def test_create_note(tools, vault_dir):
+    response = call(tools.create_note, "Artigos/../Artigos/novo.md", "# Rascunho\n")
+
+    assert response == {"success": True, "file": "Artigos/novo.md"}
+    assert (vault_dir / "Artigos/novo.md").read_text() == "# Rascunho\n"
+    assert call(tools.create_note, "Artigos/novo.md", "outro") == {"error": "A nota já existe: Artigos/novo.md"}
+
+
 def test_frontmatter_tools(tools, write):
     note = write("Projects/x.md", NOTE)
 
@@ -106,6 +114,8 @@ def test_every_tool_returns_domain_errors_as_json(tools, write, vault_dir):
 
     responses = [
         tools.get_note_content("../secret.md"),
+        tools.create_note("../secret.md", "sobrescrito"),
+        tools.create_note("nota.txt", "x"),
         tools.update_todo("../secret.md", 0, True),
         tools.get_todos(folder=".."),
         tools.get_frontmatter("/etc/passwd"),

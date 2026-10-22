@@ -20,6 +20,7 @@ SERVER_NAME = "obsidian-mcp"
 TOOL_NAMES = (
     "get_todos",
     "get_note_content",
+    "create_note",
     "update_todo",
     "get_frontmatter",
     "update_frontmatter",
@@ -111,6 +112,19 @@ class VaultTools:
     def get_note_content(self, note_path: str) -> str:
         """Lê o conteúdo completo de uma nota do Obsidian"""
         return self.services.notes.get_content(note_path)
+
+    @returns_errors_as_json
+    def create_note(self, note_path: str, content: str) -> str:
+        """
+        Cria uma nota nova no vault. Nunca sobrescreve uma nota existente.
+
+        Parâmetros:
+        - note_path: Caminho da nota relativo ao vault (ex: "Artigos/rascunho.md").
+          Pastas que não existem são criadas.
+        - content: Conteúdo Markdown da nota (pode incluir frontmatter YAML)
+        """
+        self.services.notes.create_note(note_path, content)
+        return to_json({"success": True, "file": display_path(note_path)}, indent=None)
 
     @returns_errors_as_json
     def update_todo(self, note_path: str, line_number: int, completed: bool) -> str:
